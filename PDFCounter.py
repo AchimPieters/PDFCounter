@@ -14,6 +14,19 @@ import hmac
 import subprocess
 from pathlib import Path
 
+# Hints for PyInstaller static analysis:
+# the imports below are intentionally unreachable at runtime, but help
+# PyInstaller discover optional GUI modules when building from this script.
+if False:  # pragma: no cover
+    from PySide6 import QtCore as _QtCoreHint
+    from PySide6 import QtGui as _QtGuiHint
+    from PySide6 import QtWidgets as _QtWidgetsHint
+    import tkinter as _TkHint
+    import tkinter.filedialog as _TkFileDialogHint
+    import tkinter.messagebox as _TkMessageBoxHint
+    import tkinter.simpledialog as _TkSimpleDialogHint
+    import tkinter.ttk as _TtkHint
+
 
 APP_TITLE = "PDF Color / Black-and-White Counter"
 COPYRIGHT_TEXT = "© Achim Pieters 2026"
@@ -1056,10 +1069,9 @@ def main():
     if getattr(sys, "frozen", False) and len(sys.argv) < 2:
         show_startup_error(
             "No GUI toolkit was packaged, so the app cannot stay open in windowed mode.\n\n"
-            "Rebuild with hidden imports, for example:\n"
-            "pyinstaller --onefile --windowed --icon PDFCounter.icns "
-            "--hidden-import PySide6.QtCore --hidden-import PySide6.QtGui "
-            "--hidden-import PySide6.QtWidgets PDFCounter.py"
+            "Make sure PySide6 is installed in the same Python environment, then rebuild with:\n"
+            "python -m PyInstaller --onefile --windowed --icon PDFCounter.icns "
+            "--collect-submodules PySide6 --collect-data PySide6 PDFCounter.py"
         )
         return 1
 
