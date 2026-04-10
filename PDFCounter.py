@@ -4,54 +4,105 @@
 # cd Desktop
 # pyinstaller --onefile --windowed pdf_color_bw_counter_app.py
 
+import importlib
+import importlib.util
+import json
+import os
+import re
 import sys
+import hashlib
+import hmac
 from pathlib import Path
 
 
 APP_TITLE = "PDF Color / Black-and-White Counter"
 COPYRIGHT_TEXT = "© Achim Pieters 2026"
+LICENSE_FILE = Path.home() / ".pdfcounter_license.json"
+LICENSE_SIGNING_CODE = "PDFCOUNTER-ENABLE-2026"
+UNREGISTERED_PAGE_LIMIT = 3
 
 
-# GUI backends: try PySide6 first, then tkinter.
-try:
-    from PySide6.QtCore import Qt, Signal, QSize
-    from PySide6.QtGui import QAction, QPalette, QColor
-    from PySide6.QtWidgets import (
-        QAbstractSpinBox,
-        QApplication,
-        QFileDialog,
-        QDoubleSpinBox,
-        QFrame,
-        QGridLayout,
-        QGroupBox,
-        QHBoxLayout,
-        QLabel,
-        QLineEdit,
-        QMainWindow,
-        QMessageBox,
-        QPushButton,
-        QSizePolicy,
-        QSpinBox,
-        QStackedWidget,
-        QStyle,
-        QTabBar,
-        QTextBrowser,
-        QToolBar,
-        QToolButton,
-        QVBoxLayout,
-        QWidget,
-    )
-    GUI_BACKEND = "pyside6"
-except Exception:
-    GUI_BACKEND = None
+def _load_gui_backend():
+    """Load a supported GUI backend without try/except around import statements."""
+    pyside6_spec = importlib.util.find_spec("PySide6")
+    if pyside6_spec is not None:
+        try:
+            qtcore = importlib.import_module("PySide6.QtCore")
+            qtgui = importlib.import_module("PySide6.QtGui")
+            qtwidgets = importlib.import_module("PySide6.QtWidgets")
+        except Exception:
+            qtcore = None
+            qtgui = None
+            qtwidgets = None
 
-if GUI_BACKEND is None:
-    try:
-        import tkinter as tk
-        from tkinter import filedialog, messagebox, ttk
-        GUI_BACKEND = "tkinter"
-    except Exception:
-        GUI_BACKEND = None
+        if qtcore and qtgui and qtwidgets:
+            globals().update(
+                {
+                    "Qt": qtcore.Qt,
+                    "Signal": qtcore.Signal,
+                    "QSize": qtcore.QSize,
+                    "QAction": qtgui.QAction,
+                    "QPalette": qtgui.QPalette,
+                    "QColor": qtgui.QColor,
+                    "QAbstractSpinBox": qtwidgets.QAbstractSpinBox,
+                    "QApplication": qtwidgets.QApplication,
+                    "QFileDialog": qtwidgets.QFileDialog,
+                    "QDoubleSpinBox": qtwidgets.QDoubleSpinBox,
+                    "QFrame": qtwidgets.QFrame,
+                    "QGridLayout": qtwidgets.QGridLayout,
+                    "QGroupBox": qtwidgets.QGroupBox,
+                    "QHBoxLayout": qtwidgets.QHBoxLayout,
+                    "QLabel": qtwidgets.QLabel,
+                    "QLineEdit": qtwidgets.QLineEdit,
+                    "QInputDialog": qtwidgets.QInputDialog,
+                    "QMainWindow": qtwidgets.QMainWindow,
+                    "QMessageBox": qtwidgets.QMessageBox,
+                    "QPushButton": qtwidgets.QPushButton,
+                    "QSizePolicy": qtwidgets.QSizePolicy,
+                    "QSpinBox": qtwidgets.QSpinBox,
+                    "QStackedWidget": qtwidgets.QStackedWidget,
+                    "QStyle": qtwidgets.QStyle,
+                    "QTabBar": qtwidgets.QTabBar,
+                    "QTextBrowser": qtwidgets.QTextBrowser,
+                    "QToolBar": qtwidgets.QToolBar,
+                    "QToolButton": qtwidgets.QToolButton,
+                    "QVBoxLayout": qtwidgets.QVBoxLayout,
+                    "QWidget": qtwidgets.QWidget,
+                }
+            )
+            return "pyside6"
+
+    tkinter_spec = importlib.util.find_spec("tkinter")
+    if tkinter_spec is not None:
+        linux_headless = sys.platform.startswith("linux") and not (
+            os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+        )
+        if linux_headless:
+            return None
+        try:
+            tkinter_module = importlib.import_module("tkinter")
+            filedialog_module = importlib.import_module("tkinter.filedialog")
+            messagebox_module = importlib.import_module("tkinter.messagebox")
+            simpledialog_module = importlib.import_module("tkinter.simpledialog")
+            ttk_module = importlib.import_module("tkinter.ttk")
+        except Exception:
+            return None
+
+        globals().update(
+            {
+                "tk": tkinter_module,
+                "filedialog": filedialog_module,
+                "messagebox": messagebox_module,
+                "simpledialog": simpledialog_module,
+                "ttk": ttk_module,
+            }
+        )
+        return "tkinter"
+
+    return None
+
+
+GUI_BACKEND = _load_gui_backend()
 
 
 def load_fitz():
@@ -80,6 +131,59 @@ def load_fitz():
         + "\n- ".join(errors)
     )
     raise RuntimeError(message)
+
+
+def normalize_email(email):
+    return email.strip().lower()
+
+
+def generate_serial(email, serial_code=LICENSE_SIGNING_CODE):
+    clean_email = normalize_email(email)
+    digest = hmac.new(
+        serial_code.encode("utf-8"),
+        clean_email.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest().upper()
+    compact = digest[:25]
+    return "-".join(compact[i:i + 5] for i in range(0, len(compact), 5))
+
+
+def normalize_serial(serial):
+    return re.sub(r"[^A-Z0-9]", "", serial.upper())
+
+
+def is_valid_license(email, serial):
+    expected = normalize_serial(generate_serial(email))
+    return hmac.compare_digest(normalize_serial(serial), expected)
+
+
+def save_license(email, serial):
+    LICENSE_FILE.write_text(
+        json.dumps({"email": normalize_email(email), "serial": serial}, indent=2),
+        encoding="utf-8",
+    )
+
+
+def load_license():
+    if not LICENSE_FILE.exists():
+        return None
+    try:
+        data = json.loads(LICENSE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+    email = data.get("email", "")
+    serial = data.get("serial", "")
+    if not email or not serial:
+        return None
+    return {"email": email, "serial": serial}
+
+
+def is_registered():
+    license_data = load_license()
+    if not license_data:
+        return False
+    return is_valid_license(license_data["email"], license_data["serial"])
 
 
 def is_color_page(page, fitz_module, tolerance=12, min_color_ratio=0.001, dpi=24):
@@ -117,7 +221,7 @@ def is_color_page(page, fitz_module, tolerance=12, min_color_ratio=0.001, dpi=24
     return False
 
 
-def count_pdf_pages(pdf_path, tolerance=12, min_color_ratio=0.001, dpi=24):
+def count_pdf_pages(pdf_path, tolerance=12, min_color_ratio=0.001, dpi=24, page_limit=None):
     pdf_path = Path(pdf_path)
 
     if not pdf_path.exists():
@@ -135,7 +239,10 @@ def count_pdf_pages(pdf_path, tolerance=12, min_color_ratio=0.001, dpi=24):
         color_pages = 0
         bw_pages = 0
 
-        for page in doc:
+        pages_to_scan = len(doc) if page_limit is None else min(len(doc), int(page_limit))
+
+        for page_index in range(pages_to_scan):
+            page = doc[page_index]
             if is_color_page(
                 page,
                 fitz_module=fitz,
@@ -147,7 +254,7 @@ def count_pdf_pages(pdf_path, tolerance=12, min_color_ratio=0.001, dpi=24):
             else:
                 bw_pages += 1
 
-        return len(doc), color_pages, bw_pages
+        return pages_to_scan, color_pages, bw_pages
     finally:
         doc.close()
 
@@ -246,7 +353,8 @@ if GUI_BACKEND == "pyside6":
             super().__init__()
             self.setAcceptDrops(True)
             self.setWindowTitle(APP_TITLE)
-            self.setMinimumSize(900, 640)
+            self.setUnifiedTitleAndToolBarOnMac(True)
+            self.setMinimumSize(860, 600)
             self._apply_palette()
             self._create_menu()
             self._create_toolbar()
@@ -269,6 +377,7 @@ if GUI_BACKEND == "pyside6":
                 """
                 QMainWindow {
                     background: #F5F5F7;
+                    font-family: -apple-system, "SF Pro Text", ".SF NS Text", "Helvetica Neue", Arial, sans-serif;
                 }
                 QToolBar {
                     background: rgba(255,255,255,0.92);
@@ -393,17 +502,6 @@ if GUI_BACKEND == "pyside6":
                     color: #FFFFFF;
                 }
                 QTabBar::tab {
-                    background: #0A84FF;
-                    border: 1px solid #0A84FF;
-                    color: white;
-                    font-weight: 600;
-                    padding: 8px 18px;
-                    min-width: 150px;
-                }
-                QPushButton#accentButton:hover {
-                    background: #0077ED;
-                }
-                QTabBar::tab {
                     background: #E9E9ED;
                     color: #3A3A3C;
                     border: 1px solid #D1D1D6;
@@ -448,6 +546,10 @@ if GUI_BACKEND == "pyside6":
         def _create_menu(self):
             menubar = self.menuBar()
             app_menu = menubar.addMenu("App")
+
+            register_action = QAction("Register License", self)
+            register_action.triggered.connect(self.register_license)
+            app_menu.addAction(register_action)
 
             about_action = QAction("About", self)
             about_action.triggered.connect(self.show_about)
@@ -503,8 +605,31 @@ if GUI_BACKEND == "pyside6":
                 "About",
                 "PDF Color / Black-and-White Counter\n\n"
                 "Counts visible color and black-and-white pages in PDF files for print-cost estimation.\n\n"
+                f"License status: {self.license_status_text()}\n\n"
                 f"{COPYRIGHT_TEXT}",
             )
+
+        def license_status_text(self):
+            license_data = load_license()
+            if is_registered() and license_data:
+                return f"Registered to {license_data['email']}"
+            return f"Unregistered (max {UNREGISTERED_PAGE_LIMIT} pages per scan)"
+
+        def register_license(self):
+            email, ok = QInputDialog.getText(self, "Register License", "Email address:")
+            if not ok or not email.strip():
+                return
+
+            serial, ok = QInputDialog.getText(self, "Register License", "Serial key:")
+            if not ok or not serial.strip():
+                return
+
+            if is_valid_license(email, serial):
+                save_license(email, serial)
+                QMessageBox.information(self, APP_TITLE, "License activated successfully.")
+                return
+
+            QMessageBox.warning(self, APP_TITLE, "Invalid email/serial combination.")
 
         def _build_ui(self):
             central = QWidget()
@@ -717,15 +842,24 @@ if GUI_BACKEND == "pyside6":
                 return
 
             try:
+                page_limit = None if is_registered() else UNREGISTERED_PAGE_LIMIT
                 total_pages, color_pages, bw_pages = count_pdf_pages(
                     pdf_path,
                     tolerance=self.tolerance_spin.value(),
                     min_color_ratio=self.ratio_spin.value(),
                     dpi=self.dpi_spin.value(),
+                    page_limit=page_limit,
                 )
             except Exception as exc:
                 QMessageBox.critical(self, APP_TITLE, f"Analysis failed:\n{exc}")
                 return
+
+            if not is_registered():
+                QMessageBox.information(
+                    self,
+                    APP_TITLE,
+                    f"Unregistered mode: only the first {UNREGISTERED_PAGE_LIMIT} pages were scanned.",
+                )
 
             self.total_card.set_value(total_pages)
             self.color_card.set_value(color_pages)
@@ -758,6 +892,7 @@ if GUI_BACKEND == "tkinter":
             self.file_var = tk.StringVar()
             ttk.Entry(file_frame, textvariable=self.file_var).pack(side="left", fill="x", expand=True)
             ttk.Button(file_frame, text="Open…", command=self.browse_pdf).pack(side="left", padx=(8, 0))
+            ttk.Button(file_frame, text="Register", command=self.register_license).pack(side="left", padx=(8, 0))
 
             settings = ttk.LabelFrame(counter_tab, text="Settings", padding=10)
             settings.pack(fill="x", pady=(0, 10))
@@ -825,37 +960,68 @@ if GUI_BACKEND == "tkinter":
                 return
 
             try:
+                page_limit = None if is_registered() else UNREGISTERED_PAGE_LIMIT
                 total_pages, color_pages, bw_pages = count_pdf_pages(
                     pdf_path,
                     tolerance=int(self.tolerance_var.get()),
                     min_color_ratio=float(self.ratio_var.get()),
                     dpi=int(self.dpi_var.get()),
+                    page_limit=page_limit,
                 )
             except Exception as exc:
                 messagebox.showerror(APP_TITLE, f"Analysis failed:\n{exc}")
                 return
 
+            if not is_registered():
+                messagebox.showinfo(
+                    APP_TITLE,
+                    f"Unregistered mode: only the first {UNREGISTERED_PAGE_LIMIT} pages were scanned.",
+                )
+
             self.total_var.set(str(total_pages))
             self.color_var.set(str(color_pages))
             self.bw_var.set(str(bw_pages))
+
+        def register_license(self):
+            email = simpledialog.askstring(APP_TITLE, "Email address:")
+            if not email:
+                return
+            serial = simpledialog.askstring(APP_TITLE, "Serial key:")
+            if not serial:
+                return
+            if is_valid_license(email, serial):
+                save_license(email, serial)
+                messagebox.showinfo(APP_TITLE, "License activated successfully.")
+            else:
+                messagebox.showwarning(APP_TITLE, "Invalid email/serial combination.")
 
         def run(self):
             self.root.mainloop()
 
 
 def run_cli():
-    if len(sys.argv) < 2:
-        print("Usage: python app.py file.pdf")
-        print("Or run the script in an environment with PySide6 or tkinter for the graphical interface.")
+    if len(sys.argv) >= 3 and sys.argv[1] == "--generate-serial":
+        email = sys.argv[2]
+        print(generate_serial(email))
         return 0
+
+    if len(sys.argv) < 2:
+        print("Usage: python PDFCounter.py file.pdf")
+        print("Generate serial: python PDFCounter.py --generate-serial user@example.com")
+        print("Or run the script in an environment with PySide6 or tkinter for the graphical interface.")
+        return 2
 
     pdf_path = sys.argv[1]
 
     try:
-        total_pages, color_pages, bw_pages = count_pdf_pages(pdf_path)
+        page_limit = None if is_registered() else UNREGISTERED_PAGE_LIMIT
+        total_pages, color_pages, bw_pages = count_pdf_pages(pdf_path, page_limit=page_limit)
     except Exception as exc:
         print(f"Error: {exc}")
-        return 0
+        return 1
+
+    if not is_registered():
+        print(f"Notice: unregistered mode, scanned only first {UNREGISTERED_PAGE_LIMIT} pages.")
 
     print(f"Total pages             : {total_pages}")
     print(f"Color pages             : {color_pages}")
@@ -869,17 +1035,17 @@ def main():
         window = MainWindow()
         window.show()
         app.exec()
-        return
+        return 0
 
     if GUI_BACKEND == "tkinter":
         TkApp().run()
-        return
+        return 0
 
-    run_cli()
+    return run_cli()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
 
 
 # Manual test cases:
