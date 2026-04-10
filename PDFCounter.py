@@ -6,7 +6,9 @@
 
 import importlib
 import importlib.util
+import json
 import os
+import re
 import sys
 import hashlib
 import hmac
@@ -15,6 +17,9 @@ from pathlib import Path
 
 APP_TITLE = "PDF Color / Black-and-White Counter"
 COPYRIGHT_TEXT = "© Achim Pieters 2026"
+UNREGISTERED_PAGE_LIMIT = 25
+LICENSE_SIGNING_CODE = os.environ.get("PDFCOUNTER_LICENSE_SIGNING_CODE", "PDFCounter-Default-Signing-Code")
+LICENSE_FILE = Path.home() / ".pdfcounter_license.json"
 
 
 def _load_gui_backend():
@@ -49,6 +54,7 @@ def _load_gui_backend():
                     "QHBoxLayout": qtwidgets.QHBoxLayout,
                     "QLabel": qtwidgets.QLabel,
                     "QLineEdit": qtwidgets.QLineEdit,
+                    "QInputDialog": qtwidgets.QInputDialog,
                     "QMainWindow": qtwidgets.QMainWindow,
                     "QMessageBox": qtwidgets.QMessageBox,
                     "QPushButton": qtwidgets.QPushButton,
@@ -77,6 +83,7 @@ def _load_gui_backend():
             tkinter_module = importlib.import_module("tkinter")
             filedialog_module = importlib.import_module("tkinter.filedialog")
             messagebox_module = importlib.import_module("tkinter.messagebox")
+            simpledialog_module = importlib.import_module("tkinter.simpledialog")
             ttk_module = importlib.import_module("tkinter.ttk")
         except Exception:
             return None
@@ -86,6 +93,7 @@ def _load_gui_backend():
                 "tk": tkinter_module,
                 "filedialog": filedialog_module,
                 "messagebox": messagebox_module,
+                "simpledialog": simpledialog_module,
                 "ttk": ttk_module,
             }
         )
