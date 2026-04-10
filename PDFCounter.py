@@ -11,6 +11,7 @@ import re
 import sys
 import hashlib
 import hmac
+import subprocess
 from pathlib import Path
 
 
@@ -1019,6 +1020,27 @@ def run_cli():
     return 0
 
 
+def show_startup_error(message):
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, message, APP_TITLE, 0x10)
+            return
+        except Exception:
+            pass
+
+    if sys.platform == "darwin":
+        escaped = message.replace("\\", "\\\\").replace('"', '\\"')
+        script = f'display alert "{APP_TITLE}" message "{escaped}" as critical'
+        try:
+            subprocess.run(["osascript", "-e", script], check=False)
+            return
+        except Exception:
+            pass
+
+    print(message)
+
+
 def main():
     if GUI_BACKEND == "pyside6":
         app = QApplication(sys.argv)
@@ -1030,6 +1052,16 @@ def main():
     if GUI_BACKEND == "tkinter":
         TkApp().run()
         return 0
+
+    if getattr(sys, "frozen", False) and len(sys.argv) < 2:
+        show_startup_error(
+            "No GUI toolkit was packaged, so the app cannot stay open in windowed mode.\n\n"
+            "Rebuild with hidden imports, for example:\n"
+            "pyinstaller --onefile --windowed --icon PDFCounter.icns "
+            "--hidden-import PySide6.QtCore --hidden-import PySide6.QtGui "
+            "--hidden-import PySide6.QtWidgets PDFCounter.py"
+        )
+        return 1
 
     return run_cli()
 
