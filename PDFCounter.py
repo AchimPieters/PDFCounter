@@ -4,6 +4,9 @@
 # cd Desktop
 # pyinstaller --onefile --windowed pdf_color_bw_counter_app.py
 
+import importlib
+import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -12,46 +15,84 @@ APP_TITLE = "PDF Color / Black-and-White Counter"
 COPYRIGHT_TEXT = "© Achim Pieters 2026"
 
 
-# GUI backends: try PySide6 first, then tkinter.
-try:
-    from PySide6.QtCore import Qt, Signal, QSize
-    from PySide6.QtGui import QAction, QPalette, QColor
-    from PySide6.QtWidgets import (
-        QAbstractSpinBox,
-        QApplication,
-        QFileDialog,
-        QDoubleSpinBox,
-        QFrame,
-        QGridLayout,
-        QGroupBox,
-        QHBoxLayout,
-        QLabel,
-        QLineEdit,
-        QMainWindow,
-        QMessageBox,
-        QPushButton,
-        QSizePolicy,
-        QSpinBox,
-        QStackedWidget,
-        QStyle,
-        QTabBar,
-        QTextBrowser,
-        QToolBar,
-        QToolButton,
-        QVBoxLayout,
-        QWidget,
-    )
-    GUI_BACKEND = "pyside6"
-except Exception:
-    GUI_BACKEND = None
+def _load_gui_backend():
+    """Load a supported GUI backend without try/except around import statements."""
+    pyside6_spec = importlib.util.find_spec("PySide6")
+    if pyside6_spec is not None:
+        try:
+            qtcore = importlib.import_module("PySide6.QtCore")
+            qtgui = importlib.import_module("PySide6.QtGui")
+            qtwidgets = importlib.import_module("PySide6.QtWidgets")
+        except Exception:
+            qtcore = None
+            qtgui = None
+            qtwidgets = None
 
-if GUI_BACKEND is None:
-    try:
-        import tkinter as tk
-        from tkinter import filedialog, messagebox, ttk
-        GUI_BACKEND = "tkinter"
-    except Exception:
-        GUI_BACKEND = None
+        if qtcore and qtgui and qtwidgets:
+            globals().update(
+                {
+                    "Qt": qtcore.Qt,
+                    "Signal": qtcore.Signal,
+                    "QSize": qtcore.QSize,
+                    "QAction": qtgui.QAction,
+                    "QPalette": qtgui.QPalette,
+                    "QColor": qtgui.QColor,
+                    "QAbstractSpinBox": qtwidgets.QAbstractSpinBox,
+                    "QApplication": qtwidgets.QApplication,
+                    "QFileDialog": qtwidgets.QFileDialog,
+                    "QDoubleSpinBox": qtwidgets.QDoubleSpinBox,
+                    "QFrame": qtwidgets.QFrame,
+                    "QGridLayout": qtwidgets.QGridLayout,
+                    "QGroupBox": qtwidgets.QGroupBox,
+                    "QHBoxLayout": qtwidgets.QHBoxLayout,
+                    "QLabel": qtwidgets.QLabel,
+                    "QLineEdit": qtwidgets.QLineEdit,
+                    "QMainWindow": qtwidgets.QMainWindow,
+                    "QMessageBox": qtwidgets.QMessageBox,
+                    "QPushButton": qtwidgets.QPushButton,
+                    "QSizePolicy": qtwidgets.QSizePolicy,
+                    "QSpinBox": qtwidgets.QSpinBox,
+                    "QStackedWidget": qtwidgets.QStackedWidget,
+                    "QStyle": qtwidgets.QStyle,
+                    "QTabBar": qtwidgets.QTabBar,
+                    "QTextBrowser": qtwidgets.QTextBrowser,
+                    "QToolBar": qtwidgets.QToolBar,
+                    "QToolButton": qtwidgets.QToolButton,
+                    "QVBoxLayout": qtwidgets.QVBoxLayout,
+                    "QWidget": qtwidgets.QWidget,
+                }
+            )
+            return "pyside6"
+
+    tkinter_spec = importlib.util.find_spec("tkinter")
+    if tkinter_spec is not None:
+        linux_headless = sys.platform.startswith("linux") and not (
+            os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+        )
+        if linux_headless:
+            return None
+        try:
+            tkinter_module = importlib.import_module("tkinter")
+            filedialog_module = importlib.import_module("tkinter.filedialog")
+            messagebox_module = importlib.import_module("tkinter.messagebox")
+            ttk_module = importlib.import_module("tkinter.ttk")
+        except Exception:
+            return None
+
+        globals().update(
+            {
+                "tk": tkinter_module,
+                "filedialog": filedialog_module,
+                "messagebox": messagebox_module,
+                "ttk": ttk_module,
+            }
+        )
+        return "tkinter"
+
+    return None
+
+
+GUI_BACKEND = _load_gui_backend()
 
 
 def load_fitz():
@@ -845,9 +886,9 @@ if GUI_BACKEND == "tkinter":
 
 def run_cli():
     if len(sys.argv) < 2:
-        print("Usage: python app.py file.pdf")
+        print("Usage: python PDFCounter.py file.pdf")
         print("Or run the script in an environment with PySide6 or tkinter for the graphical interface.")
-        return 0
+        return 2
 
     pdf_path = sys.argv[1]
 
@@ -855,7 +896,7 @@ def run_cli():
         total_pages, color_pages, bw_pages = count_pdf_pages(pdf_path)
     except Exception as exc:
         print(f"Error: {exc}")
-        return 0
+        return 1
 
     print(f"Total pages             : {total_pages}")
     print(f"Color pages             : {color_pages}")
@@ -869,17 +910,17 @@ def main():
         window = MainWindow()
         window.show()
         app.exec()
-        return
+        return 0
 
     if GUI_BACKEND == "tkinter":
         TkApp().run()
-        return
+        return 0
 
-    run_cli()
+    return run_cli()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
 
 
 # Manual test cases:
