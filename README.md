@@ -135,3 +135,19 @@ See `LICENSE`.
 GitHub Actions runs a CI workflow on every push and pull request that:
 - compiles `PDFCounter.py` (`python -m py_compile PDFCounter.py`)
 - runs unit tests in `tests/test_pdfcounter.py`
+
+---
+
+## Apple-style UI alignment (practical checklist)
+
+Current status: **Apple-inspired, not strict native-HIG parity** (the app uses Qt/PySide6, not SwiftUI/AppKit).
+
+### Implemented improvements
+- Unified macOS title/toolbar presentation with `setUnifiedTitleAndToolBarOnMac(True)`.
+- Removed duplicated stylesheet rules in the tab/button styling to keep visual behavior predictable.
+- Added a macOS-first font stack (`-apple-system` / SF variants) to better match Apple typography.
+
+### Remaining gaps for strict HIG parity
+- Use platform-native controls and spacing metrics everywhere (Qt custom styles are still approximate).
+- Add full keyboard/focus behavior parity and accessibility auditing against native macOS controls.
+- Validate dark mode and dynamic system color behavior with semantic tokens (instead of fixed hex values).

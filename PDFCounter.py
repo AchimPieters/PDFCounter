@@ -287,7 +287,8 @@ if GUI_BACKEND == "pyside6":
             super().__init__()
             self.setAcceptDrops(True)
             self.setWindowTitle(APP_TITLE)
-            self.setMinimumSize(900, 640)
+            self.setUnifiedTitleAndToolBarOnMac(True)
+            self.setMinimumSize(860, 600)
             self._apply_palette()
             self._create_menu()
             self._create_toolbar()
@@ -310,6 +311,7 @@ if GUI_BACKEND == "pyside6":
                 """
                 QMainWindow {
                     background: #F5F5F7;
+                    font-family: -apple-system, "SF Pro Text", ".SF NS Text", "Helvetica Neue", Arial, sans-serif;
                 }
                 QToolBar {
                     background: rgba(255,255,255,0.92);
@@ -432,17 +434,6 @@ if GUI_BACKEND == "pyside6":
                     background: #A7D0FF;
                     border: 1px solid #A7D0FF;
                     color: #FFFFFF;
-                }
-                QTabBar::tab {
-                    background: #0A84FF;
-                    border: 1px solid #0A84FF;
-                    color: white;
-                    font-weight: 600;
-                    padding: 8px 18px;
-                    min-width: 150px;
-                }
-                QPushButton#accentButton:hover {
-                    background: #0077ED;
                 }
                 QTabBar::tab {
                     background: #E9E9ED;
