@@ -5,8 +5,9 @@
 # pyinstaller --onefile --windowed pdf_color_bw_counter_app.py
 
 import importlib
-import importlib.util
+import json
 import os
+import re
 import sys
 import hashlib
 import hmac
@@ -15,83 +16,84 @@ from pathlib import Path
 
 APP_TITLE = "PDF Color / Black-and-White Counter"
 COPYRIGHT_TEXT = "© Achim Pieters 2026"
+UNREGISTERED_PAGE_LIMIT = 25
+LICENSE_SIGNING_CODE = os.environ.get("PDFCOUNTER_LICENSE_SIGNING_CODE", "PDFCounter-Default-Signing-Code")
+LICENSE_FILE = Path.home() / ".pdfcounter_license.json"
 
 
 def _load_gui_backend():
     """Load a supported GUI backend without try/except around import statements."""
-    pyside6_spec = importlib.util.find_spec("PySide6")
-    if pyside6_spec is not None:
-        try:
-            qtcore = importlib.import_module("PySide6.QtCore")
-            qtgui = importlib.import_module("PySide6.QtGui")
-            qtwidgets = importlib.import_module("PySide6.QtWidgets")
-        except Exception:
-            qtcore = None
-            qtgui = None
-            qtwidgets = None
+    try:
+        qtcore = importlib.import_module("PySide6.QtCore")
+        qtgui = importlib.import_module("PySide6.QtGui")
+        qtwidgets = importlib.import_module("PySide6.QtWidgets")
+    except Exception:
+        qtcore = None
+        qtgui = None
+        qtwidgets = None
 
-        if qtcore and qtgui and qtwidgets:
-            globals().update(
-                {
-                    "Qt": qtcore.Qt,
-                    "Signal": qtcore.Signal,
-                    "QSize": qtcore.QSize,
-                    "QAction": qtgui.QAction,
-                    "QPalette": qtgui.QPalette,
-                    "QColor": qtgui.QColor,
-                    "QAbstractSpinBox": qtwidgets.QAbstractSpinBox,
-                    "QApplication": qtwidgets.QApplication,
-                    "QFileDialog": qtwidgets.QFileDialog,
-                    "QDoubleSpinBox": qtwidgets.QDoubleSpinBox,
-                    "QFrame": qtwidgets.QFrame,
-                    "QGridLayout": qtwidgets.QGridLayout,
-                    "QGroupBox": qtwidgets.QGroupBox,
-                    "QHBoxLayout": qtwidgets.QHBoxLayout,
-                    "QLabel": qtwidgets.QLabel,
-                    "QLineEdit": qtwidgets.QLineEdit,
-                    "QMainWindow": qtwidgets.QMainWindow,
-                    "QMessageBox": qtwidgets.QMessageBox,
-                    "QPushButton": qtwidgets.QPushButton,
-                    "QSizePolicy": qtwidgets.QSizePolicy,
-                    "QSpinBox": qtwidgets.QSpinBox,
-                    "QStackedWidget": qtwidgets.QStackedWidget,
-                    "QStyle": qtwidgets.QStyle,
-                    "QTabBar": qtwidgets.QTabBar,
-                    "QTextBrowser": qtwidgets.QTextBrowser,
-                    "QToolBar": qtwidgets.QToolBar,
-                    "QToolButton": qtwidgets.QToolButton,
-                    "QVBoxLayout": qtwidgets.QVBoxLayout,
-                    "QWidget": qtwidgets.QWidget,
-                }
-            )
-            return "pyside6"
-
-    tkinter_spec = importlib.util.find_spec("tkinter")
-    if tkinter_spec is not None:
-        linux_headless = sys.platform.startswith("linux") and not (
-            os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
-        )
-        if linux_headless:
-            return None
-        try:
-            tkinter_module = importlib.import_module("tkinter")
-            filedialog_module = importlib.import_module("tkinter.filedialog")
-            messagebox_module = importlib.import_module("tkinter.messagebox")
-            ttk_module = importlib.import_module("tkinter.ttk")
-        except Exception:
-            return None
-
+    if qtcore and qtgui and qtwidgets:
         globals().update(
             {
-                "tk": tkinter_module,
-                "filedialog": filedialog_module,
-                "messagebox": messagebox_module,
-                "ttk": ttk_module,
+                "Qt": qtcore.Qt,
+                "Signal": qtcore.Signal,
+                "QSize": qtcore.QSize,
+                "QAction": qtgui.QAction,
+                "QPalette": qtgui.QPalette,
+                "QColor": qtgui.QColor,
+                "QAbstractSpinBox": qtwidgets.QAbstractSpinBox,
+                "QApplication": qtwidgets.QApplication,
+                "QFileDialog": qtwidgets.QFileDialog,
+                "QDoubleSpinBox": qtwidgets.QDoubleSpinBox,
+                "QFrame": qtwidgets.QFrame,
+                "QGridLayout": qtwidgets.QGridLayout,
+                "QGroupBox": qtwidgets.QGroupBox,
+                "QHBoxLayout": qtwidgets.QHBoxLayout,
+                "QLabel": qtwidgets.QLabel,
+                "QLineEdit": qtwidgets.QLineEdit,
+                "QInputDialog": qtwidgets.QInputDialog,
+                "QMainWindow": qtwidgets.QMainWindow,
+                "QMessageBox": qtwidgets.QMessageBox,
+                "QPushButton": qtwidgets.QPushButton,
+                "QSizePolicy": qtwidgets.QSizePolicy,
+                "QSpinBox": qtwidgets.QSpinBox,
+                "QStackedWidget": qtwidgets.QStackedWidget,
+                "QStyle": qtwidgets.QStyle,
+                "QTabBar": qtwidgets.QTabBar,
+                "QTextBrowser": qtwidgets.QTextBrowser,
+                "QToolBar": qtwidgets.QToolBar,
+                "QToolButton": qtwidgets.QToolButton,
+                "QVBoxLayout": qtwidgets.QVBoxLayout,
+                "QWidget": qtwidgets.QWidget,
             }
         )
-        return "tkinter"
+        return "pyside6"
 
-    return None
+    linux_headless = sys.platform.startswith("linux") and not (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    )
+    if linux_headless:
+        return None
+
+    try:
+        tkinter_module = importlib.import_module("tkinter")
+        filedialog_module = importlib.import_module("tkinter.filedialog")
+        messagebox_module = importlib.import_module("tkinter.messagebox")
+        simpledialog_module = importlib.import_module("tkinter.simpledialog")
+        ttk_module = importlib.import_module("tkinter.ttk")
+    except Exception:
+        return None
+
+    globals().update(
+        {
+            "tk": tkinter_module,
+            "filedialog": filedialog_module,
+            "messagebox": messagebox_module,
+            "simpledialog": simpledialog_module,
+            "ttk": ttk_module,
+        }
+    )
+    return "tkinter"
 
 
 GUI_BACKEND = _load_gui_backend()
