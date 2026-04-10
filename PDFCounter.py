@@ -1,0 +1,905 @@
+# IMPORTANT:
+# Run this script from the folder where the file is located.
+# Example:
+# cd Desktop
+# pyinstaller --onefile --windowed pdf_color_bw_counter_app.py
+
+import sys
+from pathlib import Path
+
+
+APP_TITLE = "PDF Color / Black-and-White Counter"
+COPYRIGHT_TEXT = "© Achim Pieters 2026"
+
+
+# GUI backends: try PySide6 first, then tkinter.
+try:
+    from PySide6.QtCore import Qt, Signal, QSize
+    from PySide6.QtGui import QAction, QPalette, QColor
+    from PySide6.QtWidgets import (
+        QAbstractSpinBox,
+        QApplication,
+        QFileDialog,
+        QDoubleSpinBox,
+        QFrame,
+        QGridLayout,
+        QGroupBox,
+        QHBoxLayout,
+        QLabel,
+        QLineEdit,
+        QMainWindow,
+        QMessageBox,
+        QPushButton,
+        QSizePolicy,
+        QSpinBox,
+        QStackedWidget,
+        QStyle,
+        QTabBar,
+        QTextBrowser,
+        QToolBar,
+        QToolButton,
+        QVBoxLayout,
+        QWidget,
+    )
+    GUI_BACKEND = "pyside6"
+except Exception:
+    GUI_BACKEND = None
+
+if GUI_BACKEND is None:
+    try:
+        import tkinter as tk
+        from tkinter import filedialog, messagebox, ttk
+        GUI_BACKEND = "tkinter"
+    except Exception:
+        GUI_BACKEND = None
+
+
+def load_fitz():
+    """Load PyMuPDF robustly."""
+    errors = []
+
+    try:
+        import pymupdf as fitz  # PyMuPDF
+        return fitz
+    except Exception as exc:
+        errors.append(f"pymupdf import failed: {exc}")
+
+    try:
+        import fitz  # type: ignore
+        return fitz
+    except Exception as exc:
+        errors.append(f"fitz import failed: {exc}")
+
+    message = (
+        "PyMuPDF is not available in this Python environment.\n\n"
+        "Install it using the same Python interpreter that starts this app:\n"
+        "python -m pip install --upgrade pymupdf\n\n"
+        "If you previously installed the wrong `fitz` package, remove it first:\n"
+        "python -m pip uninstall -y fitz\n\n"
+        "Technical details:\n- "
+        + "\n- ".join(errors)
+    )
+    raise RuntimeError(message)
+
+
+def is_color_page(page, fitz_module, tolerance=12, min_color_ratio=0.001, dpi=24):
+    scale = dpi / 72.0
+    pix = page.get_pixmap(
+        matrix=fitz_module.Matrix(scale, scale),
+        colorspace=fitz_module.csRGB,
+        alpha=False,
+    )
+
+    samples = pix.samples
+    channels = pix.n
+    total_pixels = pix.width * pix.height
+
+    if total_pixels == 0:
+        return False
+
+    min_color_pixels = max(1, int(total_pixels * min_color_ratio))
+    color_pixels = 0
+
+    for i in range(0, len(samples), channels):
+        r = samples[i]
+        g = samples[i + 1]
+        b = samples[i + 2]
+
+        if (
+            abs(r - g) > tolerance
+            or abs(g - b) > tolerance
+            or abs(r - b) > tolerance
+        ):
+            color_pixels += 1
+            if color_pixels >= min_color_pixels:
+                return True
+
+    return False
+
+
+def count_pdf_pages(pdf_path, tolerance=12, min_color_ratio=0.001, dpi=24):
+    pdf_path = Path(pdf_path)
+
+    if not pdf_path.exists():
+        raise FileNotFoundError(f"File does not exist: {pdf_path}")
+
+    if not pdf_path.is_file():
+        raise FileNotFoundError(f"Path is not a file: {pdf_path}")
+
+    if pdf_path.suffix.lower() != ".pdf":
+        raise ValueError(f"File is not a PDF: {pdf_path.name}")
+
+    fitz = load_fitz()
+    doc = fitz.open(str(pdf_path))
+    try:
+        color_pages = 0
+        bw_pages = 0
+
+        for page in doc:
+            if is_color_page(
+                page,
+                fitz_module=fitz,
+                tolerance=tolerance,
+                min_color_ratio=min_color_ratio,
+                dpi=dpi,
+            ):
+                color_pages += 1
+            else:
+                bw_pages += 1
+
+        return len(doc), color_pages, bw_pages
+    finally:
+        doc.close()
+
+
+if GUI_BACKEND == "pyside6":
+    class DropArea(QFrame):
+        file_dropped = Signal(str)
+
+        def __init__(self):
+            super().__init__()
+            self.setAcceptDrops(True)
+            self.setObjectName("dropArea")
+            self._build_ui()
+
+        def _build_ui(self):
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(22, 22, 22, 22)
+            layout.setSpacing(6)
+
+            self.icon_label = QLabel()
+            self.icon_label.setAlignment(Qt.AlignCenter)
+            self.icon_label.setPixmap(
+                self.style().standardIcon(QStyle.SP_DialogOpenButton).pixmap(28, 28)
+            )
+
+            self.title_label = QLabel("Drop a PDF here")
+            self.title_label.setObjectName("dropTitle")
+            self.title_label.setAlignment(Qt.AlignCenter)
+
+            self.subtitle_label = QLabel("or use Open in the toolbar")
+            self.subtitle_label.setObjectName("secondaryText")
+            self.subtitle_label.setAlignment(Qt.AlignCenter)
+
+            layout.addStretch()
+            layout.addWidget(self.icon_label)
+            layout.addWidget(self.title_label)
+            layout.addWidget(self.subtitle_label)
+            layout.addStretch()
+
+        def _set_dragging(self, dragging):
+            self.setProperty("dragging", dragging)
+            self.style().unpolish(self)
+            self.style().polish(self)
+            self.update()
+
+        def dragEnterEvent(self, event):
+            if event.mimeData().hasUrls():
+                for url in event.mimeData().urls():
+                    if url.isLocalFile() and url.toLocalFile().lower().endswith(".pdf"):
+                        event.acceptProposedAction()
+                        self._set_dragging(True)
+                        return
+            event.ignore()
+
+        def dragLeaveEvent(self, event):
+            self._set_dragging(False)
+            super().dragLeaveEvent(event)
+
+        def dropEvent(self, event):
+            self._set_dragging(False)
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    path = url.toLocalFile()
+                    if path.lower().endswith(".pdf"):
+                        self.file_dropped.emit(path)
+                        event.acceptProposedAction()
+                        return
+            event.ignore()
+
+
+    class StatCard(QFrame):
+        def __init__(self, title):
+            super().__init__()
+            self.setObjectName("statCard")
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(18, 16, 18, 16)
+            layout.setSpacing(6)
+
+            self.title_label = QLabel(title)
+            self.title_label.setObjectName("statTitle")
+
+            self.value_label = QLabel("—")
+            self.value_label.setObjectName("statValue")
+            self.value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+            layout.addWidget(self.title_label)
+            layout.addWidget(self.value_label)
+            layout.addStretch()
+
+        def set_value(self, value):
+            self.value_label.setText(str(value))
+
+
+    class MainWindow(QMainWindow):
+        def __init__(self):
+            super().__init__()
+            self.setAcceptDrops(True)
+            self.setWindowTitle(APP_TITLE)
+            self.setMinimumSize(900, 640)
+            self._apply_palette()
+            self._create_menu()
+            self._create_toolbar()
+            self._build_ui()
+
+        def _apply_palette(self):
+            palette = self.palette()
+            palette.setColor(QPalette.Window, QColor("#F5F5F7"))
+            palette.setColor(QPalette.Base, QColor("#FFFFFF"))
+            palette.setColor(QPalette.AlternateBase, QColor("#F2F2F7"))
+            palette.setColor(QPalette.Button, QColor("#FFFFFF"))
+            palette.setColor(QPalette.ButtonText, QColor("#1D1D1F"))
+            palette.setColor(QPalette.Text, QColor("#1D1D1F"))
+            palette.setColor(QPalette.WindowText, QColor("#1D1D1F"))
+            palette.setColor(QPalette.Highlight, QColor("#0A84FF"))
+            palette.setColor(QPalette.HighlightedText, QColor("#FFFFFF"))
+            self.setPalette(palette)
+
+            self.setStyleSheet(
+                """
+                QMainWindow {
+                    background: #F5F5F7;
+                }
+                QToolBar {
+                    background: rgba(255,255,255,0.92);
+                    border: none;
+                    border-bottom: 1px solid #DADADF;
+                    spacing: 8px;
+                    padding: 8px 12px;
+                }
+                QGroupBox {
+                    background: #FFFFFF;
+                    border: 1px solid #E5E5EA;
+                    border-radius: 12px;
+                    margin-top: 12px;
+                    padding: 16px;
+                    font-weight: 600;
+                    color: #1D1D1F;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 12px;
+                    padding: 0 6px;
+                    color: #6E6E73;
+                }
+                QLabel#pageTitle {
+                    font-size: 28px;
+                    font-weight: 700;
+                    color: #1D1D1F;
+                }
+                QLabel#secondaryText {
+                    color: #6E6E73;
+                    font-size: 13px;
+                }
+                QLabel#dropTitle {
+                    color: #1D1D1F;
+                    font-size: 17px;
+                    font-weight: 600;
+                }
+                QFrame#dropArea {
+                    background: #FBFBFD;
+                    border: 1px dashed #C7C7CC;
+                    border-radius: 12px;
+                }
+                QFrame#dropArea[dragging="true"] {
+                    background: #EEF6FF;
+                    border: 2px dashed #0A84FF;
+                }
+                QLineEdit, QSpinBox, QDoubleSpinBox, QTextBrowser {
+                    background: #FFFFFF;
+                    border: 1px solid #D1D1D6;
+                    border-radius: 10px;
+                    padding: 8px 10px;
+                    min-height: 22px;
+                    color: #1D1D1F;
+                }
+                QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTextBrowser:focus {
+                    border: 1px solid #0A84FF;
+                }
+                QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
+                    width: 18px;
+                    border: none;
+                    background: transparent;
+                }
+                QPushButton, QToolButton {
+                    background: #FFFFFF;
+                    border: 1px solid #D1D1D6;
+                    border-radius: 10px;
+                    padding: 7px 14px;
+                    min-height: 20px;
+                    color: #1D1D1F;
+                    font-weight: 500;
+                }
+                QPushButton:hover, QToolButton:hover {
+                    background: #F2F2F7;
+                }
+                QPushButton:pressed, QToolButton:pressed {
+                    background: #E5E5EA;
+                }
+                QPushButton:disabled, QToolButton:disabled {
+                    color: #8E8E93;
+                }
+                QPushButton#accentButton {
+                    background: #0A84FF;
+                    border: 1px solid #0A84FF;
+                    color: white;
+                    font-weight: 600;
+                    padding: 8px 18px;
+                    min-width: 150px;
+                }
+                QPushButton#accentButton:hover {
+                    background: #0077ED;
+                }
+                QPushButton#accentButton:pressed {
+                    background: #0068D1;
+                }
+                QPushButton#accentButton:disabled {
+                    background: #A7D0FF;
+                    border: 1px solid #A7D0FF;
+                    color: #FFFFFF;
+                }
+                QToolButton#toolbarButton {
+                    min-width: 92px;
+                    padding: 7px 12px;
+                    color: #1D1D1F;
+                }
+                QToolButton#toolbarPrimaryButton {
+                    min-width: 92px;
+                    padding: 7px 12px;
+                    background: #0A84FF;
+                    border: 1px solid #0A84FF;
+                    color: #FFFFFF;
+                    font-weight: 600;
+                }
+                QToolButton#toolbarPrimaryButton:hover {
+                    background: #0077ED;
+                }
+                QToolButton#toolbarPrimaryButton:pressed {
+                    background: #0068D1;
+                }
+                QToolButton#toolbarPrimaryButton:disabled {
+                    background: #A7D0FF;
+                    border: 1px solid #A7D0FF;
+                    color: #FFFFFF;
+                }
+                QTabBar::tab {
+                    background: #0A84FF;
+                    border: 1px solid #0A84FF;
+                    color: white;
+                    font-weight: 600;
+                    padding: 8px 18px;
+                    min-width: 150px;
+                }
+                QPushButton#accentButton:hover {
+                    background: #0077ED;
+                }
+                QTabBar::tab {
+                    background: #E9E9ED;
+                    color: #3A3A3C;
+                    border: 1px solid #D1D1D6;
+                    padding: 7px 18px;
+                    min-width: 100px;
+                    font-weight: 600;
+                }
+                QTabBar::tab:selected {
+                    background: #FFFFFF;
+                    color: #1D1D1F;
+                }
+                QTabBar::tab:first {
+                    border-top-left-radius: 9px;
+                    border-bottom-left-radius: 9px;
+                }
+                QTabBar::tab:last {
+                    border-top-right-radius: 9px;
+                    border-bottom-right-radius: 9px;
+                }
+                QFrame#statCard {
+                    background: #FFFFFF;
+                    border: 1px solid #E5E5EA;
+                    border-radius: 12px;
+                }
+                QLabel#statTitle {
+                    color: #6E6E73;
+                    font-size: 13px;
+                    font-weight: 600;
+                }
+                QLabel#statValue {
+                    color: #1D1D1F;
+                    font-size: 34px;
+                    font-weight: 700;
+                }
+                QTextBrowser {
+                    background: #FFFFFF;
+                    selection-background-color: #0A84FF;
+                }
+                """
+            )
+
+        def _create_menu(self):
+            menubar = self.menuBar()
+            app_menu = menubar.addMenu("App")
+
+            about_action = QAction("About", self)
+            about_action.triggered.connect(self.show_about)
+            app_menu.addAction(about_action)
+
+            help_action = QAction("How to Use", self)
+            help_action.triggered.connect(self.show_help_view)
+            app_menu.addAction(help_action)
+
+            app_menu.addSeparator()
+
+            quit_action = QAction("Quit", self)
+            quit_action.triggered.connect(self.close)
+            app_menu.addAction(quit_action)
+
+        def _create_toolbar(self):
+            toolbar = QToolBar("Main Toolbar", self)
+            toolbar.setMovable(False)
+            toolbar.setFloatable(False)
+            toolbar.setIconSize(QSize(18, 18))
+            self.addToolBar(toolbar)
+            self.toolbar = toolbar
+
+            open_button = QToolButton()
+            open_button.setObjectName("toolbarButton")
+            open_button.setText("Open")
+            open_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            open_button.setIcon(self.style().standardIcon(QStyle.SP_DialogOpenButton))
+            open_button.clicked.connect(self.browse_pdf)
+            toolbar.addWidget(open_button)
+
+            analyze_button = QToolButton()
+            analyze_button.setObjectName("toolbarPrimaryButton")
+            analyze_button.setText("Analyze")
+            analyze_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            analyze_button.clicked.connect(self.analyze_pdf)
+            toolbar.addWidget(analyze_button)
+
+            spacer = QWidget()
+            spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            toolbar.addWidget(spacer)
+
+            help_button = QToolButton()
+            help_button.setObjectName("toolbarButton")
+            help_button.setText("Help")
+            help_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            help_button.clicked.connect(self.show_help_view)
+            toolbar.addWidget(help_button)
+
+        def show_about(self):
+            QMessageBox.information(
+                self,
+                "About",
+                "PDF Color / Black-and-White Counter\n\n"
+                "Counts visible color and black-and-white pages in PDF files for print-cost estimation.\n\n"
+                f"{COPYRIGHT_TEXT}",
+            )
+
+        def _build_ui(self):
+            central = QWidget()
+            self.setCentralWidget(central)
+
+            root = QVBoxLayout(central)
+            root.setContentsMargins(24, 18, 24, 18)
+            root.setSpacing(16)
+
+            title = QLabel(APP_TITLE)
+            title.setObjectName("pageTitle")
+
+            self.mode_bar = QTabBar()
+            self.mode_bar.setExpanding(False)
+            self.mode_bar.addTab("Counter")
+            self.mode_bar.addTab("Help")
+            self.mode_bar.currentChanged.connect(self._on_mode_changed)
+
+            self.stack = QStackedWidget()
+            self.counter_page = QWidget()
+            self.help_page = QWidget()
+            self.stack.addWidget(self.counter_page)
+            self.stack.addWidget(self.help_page)
+
+            self._build_counter_page()
+            self._build_help_page()
+
+            footer = QLabel(COPYRIGHT_TEXT)
+            footer.setObjectName("secondaryText")
+            footer.setAlignment(Qt.AlignCenter)
+
+            root.addWidget(title)
+            root.addWidget(self.mode_bar, 0, alignment=Qt.AlignLeft)
+            root.addWidget(self.stack, 1)
+            root.addWidget(footer)
+
+        def _build_counter_page(self):
+            root = QVBoxLayout(self.counter_page)
+            root.setContentsMargins(0, 0, 0, 0)
+            root.setSpacing(16)
+
+            file_group = QGroupBox("Document")
+            file_layout = QVBoxLayout(file_group)
+            file_layout.setSpacing(12)
+
+            self.drop_area = DropArea()
+            self.drop_area.file_dropped.connect(self.set_pdf_path)
+            self.drop_area.setMinimumHeight(150)
+
+            file_row = QHBoxLayout()
+            file_row.setSpacing(10)
+
+            self.file_edit = QLineEdit()
+            self.file_edit.setPlaceholderText("Choose a PDF file or drop one here")
+            self.file_edit.setClearButtonEnabled(True)
+
+            browse_button = QPushButton("Open…")
+            browse_button.clicked.connect(self.browse_pdf)
+
+            file_row.addWidget(self.file_edit, 1)
+            file_row.addWidget(browse_button)
+
+            file_layout.addWidget(self.drop_area)
+            file_layout.addLayout(file_row)
+
+            settings_group = QGroupBox("Settings")
+            settings_layout = QGridLayout(settings_group)
+            settings_layout.setHorizontalSpacing(14)
+            settings_layout.setVerticalSpacing(12)
+
+            self.tolerance_spin = QSpinBox()
+            self.tolerance_spin.setRange(0, 255)
+            self.tolerance_spin.setValue(12)
+            self.tolerance_spin.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
+
+            self.ratio_spin = QDoubleSpinBox()
+            self.ratio_spin.setRange(0.0001, 1.0)
+            self.ratio_spin.setDecimals(4)
+            self.ratio_spin.setSingleStep(0.0005)
+            self.ratio_spin.setValue(0.0010)
+            self.ratio_spin.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
+
+            self.dpi_spin = QSpinBox()
+            self.dpi_spin.setRange(12, 300)
+            self.dpi_spin.setValue(24)
+            self.dpi_spin.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
+
+            settings_layout.addWidget(QLabel("Tolerance"), 0, 0)
+            settings_layout.addWidget(self.tolerance_spin, 0, 1)
+            settings_layout.addWidget(QLabel("Min. color ratio"), 1, 0)
+            settings_layout.addWidget(self.ratio_spin, 1, 1)
+            settings_layout.addWidget(QLabel("DPI"), 2, 0)
+            settings_layout.addWidget(self.dpi_spin, 2, 1)
+            settings_layout.setColumnStretch(1, 1)
+
+            actions_row = QHBoxLayout()
+            actions_row.addStretch()
+
+            analyze_button = QPushButton("Analyze PDF")
+            analyze_button.setObjectName("accentButton")
+            analyze_button.clicked.connect(self.analyze_pdf)
+            actions_row.addWidget(analyze_button)
+
+            results_group = QGroupBox("Results")
+            results_layout = QHBoxLayout(results_group)
+            results_layout.setSpacing(14)
+
+            self.total_card = StatCard("Total pages")
+            self.color_card = StatCard("Color pages")
+            self.bw_card = StatCard("Black-and-white pages")
+
+            results_layout.addWidget(self.total_card, 1)
+            results_layout.addWidget(self.color_card, 1)
+            results_layout.addWidget(self.bw_card, 1)
+
+            root.addWidget(file_group)
+            root.addWidget(settings_group)
+            root.addLayout(actions_row)
+            root.addWidget(results_group)
+            root.addStretch()
+
+        def _build_help_page(self):
+            root = QVBoxLayout(self.help_page)
+            root.setContentsMargins(0, 0, 0, 0)
+            root.setSpacing(16)
+
+            help_group = QGroupBox("Help")
+            help_layout = QVBoxLayout(help_group)
+
+            help_text = QTextBrowser()
+            help_text.setOpenExternalLinks(False)
+            help_text.setHtml(
+                """
+                <div style='font-size:14px; line-height:1.6; color:#1D1D1F;'>
+                <p><b>What this app does</b></p>
+                <p>This app estimates print counts by checking whether each PDF page contains visible color or only grayscale content.</p>
+
+                <p><b>How to use it</b></p>
+                <ol>
+                  <li>Open a PDF from the toolbar, or drag a PDF into the drop area.</li>
+                  <li>Adjust the settings if needed.</li>
+                  <li>Click <b>Analyze PDF</b>.</li>
+                  <li>Read the totals in the Results section.</li>
+                </ol>
+
+                <p><b>Settings</b></p>
+                <ul>
+                  <li><b>Tolerance</b>: how different RGB channels must be before a pixel counts as color. Higher values reduce sensitivity to very small color shifts.</li>
+                  <li><b>Min. color ratio</b>: the minimum fraction of colored pixels required before a page counts as a color page.</li>
+                  <li><b>DPI</b>: the rendering resolution used during analysis. Lower values are faster; higher values can be more precise.</li>
+                </ul>
+
+                <p><b>Recommended starting values</b></p>
+                <ul>
+                  <li>Tolerance: <b>12</b></li>
+                  <li>Min. color ratio: <b>0.0010</b></li>
+                  <li>DPI: <b>24</b></li>
+                </ul>
+                </div>
+                """
+            )
+
+            help_layout.addWidget(help_text)
+            root.addWidget(help_group)
+            root.addStretch()
+
+        def _on_mode_changed(self, index):
+            self.stack.setCurrentIndex(index)
+
+        def show_help_view(self):
+            self.mode_bar.setCurrentIndex(1)
+
+        def set_pdf_path(self, path):
+            self.file_edit.setText(path)
+            self.mode_bar.setCurrentIndex(0)
+
+        def dragEnterEvent(self, event):
+            if event.mimeData().hasUrls():
+                for url in event.mimeData().urls():
+                    if url.isLocalFile() and url.toLocalFile().lower().endswith(".pdf"):
+                        event.acceptProposedAction()
+                        return
+            event.ignore()
+
+        def dropEvent(self, event):
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    path = url.toLocalFile()
+                    if path.lower().endswith(".pdf"):
+                        self.set_pdf_path(path)
+                        event.acceptProposedAction()
+                        return
+            event.ignore()
+
+        def browse_pdf(self):
+            filename, _ = QFileDialog.getOpenFileName(
+                self,
+                "Open PDF",
+                str(Path.home()),
+                "PDF files (*.pdf)",
+            )
+            if filename:
+                self.set_pdf_path(filename)
+
+        def analyze_pdf(self):
+            pdf_path = self.file_edit.text().strip()
+
+            if not pdf_path:
+                QMessageBox.warning(self, APP_TITLE, "Please choose a PDF file first.")
+                return
+
+            try:
+                total_pages, color_pages, bw_pages = count_pdf_pages(
+                    pdf_path,
+                    tolerance=self.tolerance_spin.value(),
+                    min_color_ratio=self.ratio_spin.value(),
+                    dpi=self.dpi_spin.value(),
+                )
+            except Exception as exc:
+                QMessageBox.critical(self, APP_TITLE, f"Analysis failed:\n{exc}")
+                return
+
+            self.total_card.set_value(total_pages)
+            self.color_card.set_value(color_pages)
+            self.bw_card.set_value(bw_pages)
+
+
+if GUI_BACKEND == "tkinter":
+    class TkApp:
+        def __init__(self):
+            self.root = tk.Tk()
+            self.root.title(APP_TITLE)
+            self.root.minsize(760, 440)
+            self._build_ui()
+
+        def _build_ui(self):
+            container = ttk.Frame(self.root, padding=12)
+            container.pack(fill="both", expand=True)
+
+            notebook = ttk.Notebook(container)
+            notebook.pack(fill="both", expand=True)
+
+            counter_tab = ttk.Frame(notebook, padding=12)
+            help_tab = ttk.Frame(notebook, padding=12)
+            notebook.add(counter_tab, text="Counter")
+            notebook.add(help_tab, text="Help")
+
+            file_frame = ttk.LabelFrame(counter_tab, text="Document", padding=10)
+            file_frame.pack(fill="x", pady=(0, 10))
+
+            self.file_var = tk.StringVar()
+            ttk.Entry(file_frame, textvariable=self.file_var).pack(side="left", fill="x", expand=True)
+            ttk.Button(file_frame, text="Open…", command=self.browse_pdf).pack(side="left", padx=(8, 0))
+
+            settings = ttk.LabelFrame(counter_tab, text="Settings", padding=10)
+            settings.pack(fill="x", pady=(0, 10))
+
+            self.tolerance_var = tk.IntVar(value=12)
+            self.ratio_var = tk.DoubleVar(value=0.0010)
+            self.dpi_var = tk.IntVar(value=24)
+
+            ttk.Label(settings, text="Tolerance:").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+            ttk.Spinbox(settings, from_=0, to=255, textvariable=self.tolerance_var, width=10).grid(row=0, column=1, sticky="w", pady=4)
+            ttk.Label(settings, text="Min. color ratio:").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+            ttk.Spinbox(settings, from_=0.0001, to=1.0, increment=0.0005, textvariable=self.ratio_var, width=10).grid(row=1, column=1, sticky="w", pady=4)
+            ttk.Label(settings, text="DPI:").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+            ttk.Spinbox(settings, from_=12, to=300, textvariable=self.dpi_var, width=10).grid(row=2, column=1, sticky="w", pady=4)
+
+            ttk.Button(counter_tab, text="Analyze PDF", command=self.analyze_pdf).pack(anchor="e", pady=(0, 10))
+
+            result_frame = ttk.LabelFrame(counter_tab, text="Results", padding=10)
+            result_frame.pack(fill="x")
+
+            self.total_var = tk.StringVar(value="—")
+            self.color_var = tk.StringVar(value="—")
+            self.bw_var = tk.StringVar(value="—")
+
+            ttk.Label(result_frame, text="Total pages:").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+            ttk.Label(result_frame, textvariable=self.total_var).grid(row=0, column=1, sticky="w", pady=4)
+            ttk.Label(result_frame, text="Color pages:").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+            ttk.Label(result_frame, textvariable=self.color_var).grid(row=1, column=1, sticky="w", pady=4)
+            ttk.Label(result_frame, text="Black-and-white pages:").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+            ttk.Label(result_frame, textvariable=self.bw_var).grid(row=2, column=1, sticky="w", pady=4)
+
+            ttk.Label(counter_tab, text=COPYRIGHT_TEXT, justify="center").pack(fill="x", pady=(12, 0))
+
+            help_copy = tk.Text(help_tab, wrap="word", height=18)
+            help_copy.insert(
+                "1.0",
+                "PDF Color / Black-and-White Counter\n\n"
+                "This app counts visible color pages and black-and-white pages in a PDF for print-cost estimation.\n\n"
+                "How to use it:\n"
+                "1. Open a PDF.\n"
+                "2. Adjust the settings if needed.\n"
+                "3. Click Analyze PDF.\n\n"
+                "Settings:\n"
+                "- Tolerance: how different RGB values must be before a pixel counts as color.\n"
+                "- Min. color ratio: minimum colored area needed before a page counts as color.\n"
+                "- DPI: render resolution used for analysis.\n"
+            )
+            help_copy.configure(state="disabled")
+            help_copy.pack(fill="both", expand=True)
+
+        def browse_pdf(self):
+            filename = filedialog.askopenfilename(
+                title="Open PDF",
+                initialdir=str(Path.home()),
+                filetypes=[("PDF files", "*.pdf")],
+            )
+            if filename:
+                self.file_var.set(filename)
+
+        def analyze_pdf(self):
+            pdf_path = self.file_var.get().strip()
+
+            if not pdf_path:
+                messagebox.showwarning(APP_TITLE, "Please choose a PDF file first.")
+                return
+
+            try:
+                total_pages, color_pages, bw_pages = count_pdf_pages(
+                    pdf_path,
+                    tolerance=int(self.tolerance_var.get()),
+                    min_color_ratio=float(self.ratio_var.get()),
+                    dpi=int(self.dpi_var.get()),
+                )
+            except Exception as exc:
+                messagebox.showerror(APP_TITLE, f"Analysis failed:\n{exc}")
+                return
+
+            self.total_var.set(str(total_pages))
+            self.color_var.set(str(color_pages))
+            self.bw_var.set(str(bw_pages))
+
+        def run(self):
+            self.root.mainloop()
+
+
+def run_cli():
+    if len(sys.argv) < 2:
+        print("Usage: python app.py file.pdf")
+        print("Or run the script in an environment with PySide6 or tkinter for the graphical interface.")
+        return 0
+
+    pdf_path = sys.argv[1]
+
+    try:
+        total_pages, color_pages, bw_pages = count_pdf_pages(pdf_path)
+    except Exception as exc:
+        print(f"Error: {exc}")
+        return 0
+
+    print(f"Total pages             : {total_pages}")
+    print(f"Color pages             : {color_pages}")
+    print(f"Black-and-white pages   : {bw_pages}")
+    return 0
+
+
+def main():
+    if GUI_BACKEND == "pyside6":
+        app = QApplication(sys.argv)
+        window = MainWindow()
+        window.show()
+        app.exec()
+        return
+
+    if GUI_BACKEND == "tkinter":
+        TkApp().run()
+        return
+
+    run_cli()
+
+
+if __name__ == "__main__":
+    main()
+
+
+# Manual test cases:
+# 1. Start the app without PyMuPDF: the app should still open and only show a clear install message when analysis starts.
+# 2. Choose a non-existing path: the app should show a clean error that the file does not exist.
+# 3. Choose a PDF with only grayscale pages: all pages should count as black-and-white.
+# 4. Choose a PDF with some color pages: total = color + black-and-white.
+# 5. Increase "Min. color ratio" and verify that pages with tiny traces of color are less likely to count as color.
+# 6. Lower DPI for speed and verify that the app still gives usable results.
+# 7. Accidentally install the wrong `fitz` package: the app should show technical details in the analysis error.
+# 8. Start the app in an environment without a PDF analysis package but with PySide6: the GUI should still open without crashing.
+# 9. Start the app without PySide6 but with tkinter: the tkinter GUI should open and remain usable.
+# 10. Start the app without PySide6 and without tkinter and pass a PDF path as an argument: CLI output should show the three count lines.
+# 11. Start the app without a GUI backend and without an argument: CLI should show a short usage message without a traceback.
+# 12. Use the same PDF in PySide6, tkinter, and CLI mode: the results should be identical.
+# 13. In CLI mode, pass a path to a non-existing file: a clean error should appear without a traceback.
+# 14. In CLI mode, pass a non-PDF file: a clean error should appear without a traceback.
+# 15. Start the PySide6 version and force an analysis failure: the error dialog should show a correct multi-line message without a syntax error.
+# 16. Open the About dialog from the menu: it should show the app name, description, and copyright text.
+# 17. Drag a PDF onto the drop area in the PySide6 UI: the file path should update automatically.
+# 18. Drag a PDF anywhere onto the main PySide6 window: the file path should update automatically.
+# 19. Switch between Counter and Help using the segmented control: the visible page should switch.
+# 20. The main Counter view should use a toolbar, grouped content, and a light native-looking appearance.
