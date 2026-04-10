@@ -6,9 +6,7 @@
 
 import importlib
 import importlib.util
-import json
 import os
-import re
 import sys
 import hashlib
 import hmac
@@ -17,9 +15,6 @@ from pathlib import Path
 
 APP_TITLE = "PDF Color / Black-and-White Counter"
 COPYRIGHT_TEXT = "© Achim Pieters 2026"
-LICENSE_FILE = Path.home() / ".pdfcounter_license.json"
-LICENSE_SIGNING_CODE = "PDFCOUNTER-ENABLE-2026"
-UNREGISTERED_PAGE_LIMIT = 3
 
 
 def _load_gui_backend():
@@ -54,7 +49,6 @@ def _load_gui_backend():
                     "QHBoxLayout": qtwidgets.QHBoxLayout,
                     "QLabel": qtwidgets.QLabel,
                     "QLineEdit": qtwidgets.QLineEdit,
-                    "QInputDialog": qtwidgets.QInputDialog,
                     "QMainWindow": qtwidgets.QMainWindow,
                     "QMessageBox": qtwidgets.QMessageBox,
                     "QPushButton": qtwidgets.QPushButton,
@@ -83,7 +77,6 @@ def _load_gui_backend():
             tkinter_module = importlib.import_module("tkinter")
             filedialog_module = importlib.import_module("tkinter.filedialog")
             messagebox_module = importlib.import_module("tkinter.messagebox")
-            simpledialog_module = importlib.import_module("tkinter.simpledialog")
             ttk_module = importlib.import_module("tkinter.ttk")
         except Exception:
             return None
@@ -93,7 +86,6 @@ def _load_gui_backend():
                 "tk": tkinter_module,
                 "filedialog": filedialog_module,
                 "messagebox": messagebox_module,
-                "simpledialog": simpledialog_module,
                 "ttk": ttk_module,
             }
         )
@@ -1007,7 +999,6 @@ def run_cli():
 
     if len(sys.argv) < 2:
         print("Usage: python PDFCounter.py file.pdf")
-        print("Generate serial: python PDFCounter.py --generate-serial user@example.com")
         print("Or run the script in an environment with PySide6 or tkinter for the graphical interface.")
         return 2
 
@@ -1019,9 +1010,6 @@ def run_cli():
     except Exception as exc:
         print(f"Error: {exc}")
         return 1
-
-    if not is_registered():
-        print(f"Notice: unregistered mode, scanned only first {UNREGISTERED_PAGE_LIMIT} pages.")
 
     print(f"Total pages             : {total_pages}")
     print(f"Color pages             : {color_pages}")

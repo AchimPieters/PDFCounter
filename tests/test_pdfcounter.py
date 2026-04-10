@@ -16,7 +16,6 @@ class TestPDFCounterCLI(unittest.TestCase):
         output = buffer.getvalue()
         self.assertEqual(code, 2)
         self.assertIn("Usage: python PDFCounter.py file.pdf", output)
-        self.assertIn("Generate serial", output)
 
     def test_run_cli_missing_file_returns_error_exit_code(self):
         with patch("sys.argv", ["PDFCounter.py", "/tmp/does-not-exist.pdf"]):
@@ -33,18 +32,6 @@ class TestInputValidation(unittest.TestCase):
     def test_count_pdf_pages_rejects_non_pdf_extension(self):
         with self.assertRaises(ValueError):
             PDFCounter.count_pdf_pages("README.md")
-
-
-class TestLicense(unittest.TestCase):
-    def test_generate_serial_is_stable(self):
-        serial1 = PDFCounter.generate_serial("User@example.com")
-        serial2 = PDFCounter.generate_serial("user@example.com")
-        self.assertEqual(serial1, serial2)
-
-    def test_validate_license_roundtrip(self):
-        email = "client@example.com"
-        serial = PDFCounter.generate_serial(email)
-        self.assertTrue(PDFCounter.is_valid_license(email, serial))
 
 
 if __name__ == "__main__":
