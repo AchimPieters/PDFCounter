@@ -372,46 +372,27 @@ if GUI_BACKEND == "pyside6":
         def _apply_palette(self):
             palette = self.palette()
             palette.setColor(QPalette.Window, QColor("#F2F2F7"))
-            palette.setColor(QPalette.Base, QColor("#FFFFFF"))
             palette.setColor(QPalette.AlternateBase, QColor("#F2F2F7"))
-            palette.setColor(QPalette.Button, QColor("#FFFFFF"))
-            palette.setColor(QPalette.ButtonText, QColor("#1D1D1F"))
-            palette.setColor(QPalette.Text, QColor("#1D1D1F"))
-            palette.setColor(QPalette.WindowText, QColor("#1D1D1F"))
             palette.setColor(QPalette.Highlight, QColor("#0A84FF"))
-            palette.setColor(QPalette.HighlightedText, QColor("#FFFFFF"))
             self.setPalette(palette)
 
             self.setStyleSheet(
                 """
-                QWidget {
-                    background: #F2F2F7;
-                    color: #1D1D1F;
-                }
-                QMainWindow {
-                    background: #F2F2F7;
-                    font-family: -apple-system, "SF Pro Text", ".SF NS Text", "Helvetica Neue", Arial, sans-serif;
-                }
                 QToolBar {
                     background: #F2F2F7;
-                    border: none;
                     border-bottom: 1px solid #D1D1D6;
-                    spacing: 8px;
-                    padding: 8px 16px;
+                    spacing: 6px;
+                    padding: 6px 12px;
                 }
                 QGroupBox {
-                    background: #FFFFFF;
-                    border: 1px solid #E5E5EA;
-                    border-radius: 14px;
-                    margin-top: 12px;
-                    padding: 18px;
+                    margin-top: 10px;
+                    padding: 10px 8px 8px 8px;
                     font-weight: 600;
-                    color: #1D1D1F;
                 }
                 QGroupBox::title {
                     subcontrol-origin: margin;
-                    left: 12px;
-                    padding: 0 6px;
+                    left: 8px;
+                    padding: 0 4px;
                     color: #6E6E73;
                 }
                 QLabel#pageTitle {
@@ -433,56 +414,26 @@ if GUI_BACKEND == "pyside6":
                     background: #EEF6FF;
                     border: 2px dashed #0A84FF;
                 }
-                QLineEdit, QSpinBox, QDoubleSpinBox, QTextBrowser {
-                    background: #FFFFFF;
-                    border: 1px solid #D1D1D6;
-                    border-radius: 10px;
-                    padding: 8px 10px;
-                    min-height: 22px;
-                    color: #1D1D1F;
-                }
                 QLabel#fieldLabel {
                     color: #3A3A3C;
                     font-size: 13px;
-                    font-weight: 600;
+                    font-weight: 500;
                 }
                 QLabel#footerText {
                     color: #8E8E93;
                     font-size: 12px;
                 }
-                QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTextBrowser:focus {
-                    border: 1px solid #0A84FF;
-                }
                 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
                     width: 18px;
-                    border: none;
-                    background: transparent;
-                }
-                QPushButton, QToolButton {
-                    background: #FFFFFF;
-                    border: 1px solid #D1D1D6;
-                    border-radius: 10px;
-                    padding: 7px 14px;
-                    min-height: 20px;
-                    color: #1D1D1F;
-                    font-weight: 500;
-                }
-                QPushButton:hover, QToolButton:hover {
-                    background: #F2F2F7;
-                }
-                QPushButton:pressed, QToolButton:pressed {
-                    background: #E5E5EA;
-                }
-                QPushButton:disabled, QToolButton:disabled {
-                    color: #8E8E93;
                 }
                 QPushButton#accentButton {
                     background: #0A84FF;
                     border: 1px solid #0A84FF;
                     color: white;
                     font-weight: 600;
-                    padding: 8px 18px;
-                    min-width: 150px;
+                    padding: 6px 16px;
+                    min-width: 132px;
+                    border-radius: 8px;
                 }
                 QPushButton#accentButton:hover {
                     background: #0077ED;
@@ -496,29 +447,8 @@ if GUI_BACKEND == "pyside6":
                     color: #FFFFFF;
                 }
                 QToolButton#toolbarButton {
-                    min-width: 92px;
-                    padding: 7px 12px;
-                    color: #1D1D1F;
-                }
-                QTabBar::tab {
-                    background: #E9E9ED;
-                    color: #3A3A3C;
-                    border: 1px solid #D1D1D6;
-                    padding: 7px 18px;
-                    min-width: 100px;
-                    font-weight: 600;
-                }
-                QTabBar::tab:selected {
-                    background: #FFFFFF;
-                    color: #1D1D1F;
-                }
-                QTabBar::tab:first {
-                    border-top-left-radius: 9px;
-                    border-bottom-left-radius: 9px;
-                }
-                QTabBar::tab:last {
-                    border-top-right-radius: 9px;
-                    border-bottom-right-radius: 9px;
+                    min-width: 86px;
+                    padding: 6px 10px;
                 }
                 QFrame#statCard {
                     background: #FAFAFC;
@@ -532,12 +462,8 @@ if GUI_BACKEND == "pyside6":
                 }
                 QLabel#statValue {
                     color: #1D1D1F;
-                    font-size: 34px;
-                    font-weight: 700;
-                }
-                QTextBrowser {
-                    background: #FFFFFF;
-                    selection-background-color: #0A84FF;
+                    font-size: 30px;
+                    font-weight: 650;
                 }
                 """
             )
@@ -629,10 +555,11 @@ if GUI_BACKEND == "pyside6":
 
             root = QVBoxLayout(central)
             root.setContentsMargins(20, 12, 20, 16)
-            root.setSpacing(10)
+            root.setSpacing(12)
 
             self.mode_bar = QTabBar()
             self.mode_bar.setExpanding(False)
+            self.mode_bar.setDrawBase(False)
             self.mode_bar.addTab("Counter")
             self.mode_bar.addTab("Help")
             self.mode_bar.currentChanged.connect(self._on_mode_changed)
@@ -660,15 +587,15 @@ if GUI_BACKEND == "pyside6":
         def _build_counter_page(self):
             root = QVBoxLayout(self.counter_page)
             root.setContentsMargins(0, 0, 0, 0)
-            root.setSpacing(16)
+            root.setSpacing(14)
 
             file_group = QGroupBox("Document")
             file_layout = QVBoxLayout(file_group)
-            file_layout.setSpacing(12)
+            file_layout.setSpacing(10)
 
             self.drop_area = DropArea()
             self.drop_area.file_dropped.connect(self.set_pdf_path)
-            self.drop_area.setMinimumHeight(150)
+            self.drop_area.setMinimumHeight(132)
 
             file_row = QHBoxLayout()
             file_row.setSpacing(10)
