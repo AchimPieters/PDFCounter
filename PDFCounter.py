@@ -383,6 +383,10 @@ if GUI_BACKEND == "pyside6":
 
             self.setStyleSheet(
                 """
+                QWidget {
+                    background: #F5F5F7;
+                    color: #1D1D1F;
+                }
                 QMainWindow {
                     background: #F5F5F7;
                     font-family: -apple-system, "SF Pro Text", ".SF NS Text", "Helvetica Neue", Arial, sans-serif;
