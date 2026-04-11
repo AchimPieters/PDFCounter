@@ -451,7 +451,7 @@ if GUI_BACKEND == "pyside6":
                     padding: 6px 10px;
                 }
                 QFrame#statCard {
-                    background: #FFFFFF;
+                    background: #FAFAFC;
                     border: 1px solid #E5E5EA;
                     border-radius: 12px;
                 }
