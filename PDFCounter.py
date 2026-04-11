@@ -392,11 +392,11 @@ if GUI_BACKEND == "pyside6":
                     font-family: -apple-system, "SF Pro Text", ".SF NS Text", "Helvetica Neue", Arial, sans-serif;
                 }
                 QToolBar {
-                    background: rgba(255,255,255,0.92);
+                    background: #F5F5F7;
                     border: none;
                     border-bottom: 1px solid #DADADF;
-                    spacing: 8px;
-                    padding: 8px 12px;
+                    spacing: 10px;
+                    padding: 8px 14px;
                 }
                 QGroupBox {
                     background: #FFFFFF;
@@ -414,8 +414,8 @@ if GUI_BACKEND == "pyside6":
                     color: #6E6E73;
                 }
                 QLabel#pageTitle {
-                    font-size: 28px;
-                    font-weight: 700;
+                    font-size: 24px;
+                    font-weight: 650;
                     color: #1D1D1F;
                 }
                 QLabel#secondaryText {
@@ -428,7 +428,7 @@ if GUI_BACKEND == "pyside6":
                     font-weight: 600;
                 }
                 QFrame#dropArea {
-                    background: #FBFBFD;
+                    background: #FFFFFF;
                     border: 1px dashed #C7C7CC;
                     border-radius: 12px;
                 }
@@ -443,6 +443,11 @@ if GUI_BACKEND == "pyside6":
                     padding: 8px 10px;
                     min-height: 22px;
                     color: #1D1D1F;
+                }
+                QLabel#fieldLabel {
+                    color: #3A3A3C;
+                    font-size: 13px;
+                    font-weight: 600;
                 }
                 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTextBrowser:focus {
                     border: 1px solid #0A84FF;
@@ -493,25 +498,6 @@ if GUI_BACKEND == "pyside6":
                     min-width: 92px;
                     padding: 7px 12px;
                     color: #1D1D1F;
-                }
-                QToolButton#toolbarPrimaryButton {
-                    min-width: 92px;
-                    padding: 7px 12px;
-                    background: #0A84FF;
-                    border: 1px solid #0A84FF;
-                    color: #FFFFFF;
-                    font-weight: 600;
-                }
-                QToolButton#toolbarPrimaryButton:hover {
-                    background: #0077ED;
-                }
-                QToolButton#toolbarPrimaryButton:pressed {
-                    background: #0068D1;
-                }
-                QToolButton#toolbarPrimaryButton:disabled {
-                    background: #A7D0FF;
-                    border: 1px solid #A7D0FF;
-                    color: #FFFFFF;
                 }
                 QTabBar::tab {
                     background: #E9E9ED;
@@ -593,13 +579,6 @@ if GUI_BACKEND == "pyside6":
             open_button.clicked.connect(self.browse_pdf)
             toolbar.addWidget(open_button)
 
-            analyze_button = QToolButton()
-            analyze_button.setObjectName("toolbarPrimaryButton")
-            analyze_button.setText("Analyze")
-            analyze_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
-            analyze_button.clicked.connect(self.analyze_pdf)
-            toolbar.addWidget(analyze_button)
-
             spacer = QWidget()
             spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             toolbar.addWidget(spacer)
@@ -648,8 +627,8 @@ if GUI_BACKEND == "pyside6":
             self.setCentralWidget(central)
 
             root = QVBoxLayout(central)
-            root.setContentsMargins(24, 18, 24, 18)
-            root.setSpacing(16)
+            root.setContentsMargins(24, 14, 24, 18)
+            root.setSpacing(14)
 
             title = QLabel(APP_TITLE)
             title.setObjectName("pageTitle")
@@ -730,10 +709,13 @@ if GUI_BACKEND == "pyside6":
             self.dpi_spin.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
 
             settings_layout.addWidget(QLabel("Tolerance"), 0, 0)
+            settings_layout.itemAtPosition(0, 0).widget().setObjectName("fieldLabel")
             settings_layout.addWidget(self.tolerance_spin, 0, 1)
             settings_layout.addWidget(QLabel("Min. color ratio"), 1, 0)
+            settings_layout.itemAtPosition(1, 0).widget().setObjectName("fieldLabel")
             settings_layout.addWidget(self.ratio_spin, 1, 1)
             settings_layout.addWidget(QLabel("DPI"), 2, 0)
+            settings_layout.itemAtPosition(2, 0).widget().setObjectName("fieldLabel")
             settings_layout.addWidget(self.dpi_spin, 2, 1)
             settings_layout.setColumnStretch(1, 1)
 
