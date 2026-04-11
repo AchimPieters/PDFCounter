@@ -59,6 +59,7 @@ def _load_gui_backend():
                 "QApplication": qtwidgets.QApplication,
                 "QFileDialog": qtwidgets.QFileDialog,
                 "QDoubleSpinBox": qtwidgets.QDoubleSpinBox,
+                "QFormLayout": qtwidgets.QFormLayout,
                 "QFrame": qtwidgets.QFrame,
                 "QGridLayout": qtwidgets.QGridLayout,
                 "QGroupBox": qtwidgets.QGroupBox,
@@ -370,7 +371,7 @@ if GUI_BACKEND == "pyside6":
 
         def _apply_palette(self):
             palette = self.palette()
-            palette.setColor(QPalette.Window, QColor("#F5F5F7"))
+            palette.setColor(QPalette.Window, QColor("#F2F2F7"))
             palette.setColor(QPalette.Base, QColor("#FFFFFF"))
             palette.setColor(QPalette.AlternateBase, QColor("#F2F2F7"))
             palette.setColor(QPalette.Button, QColor("#FFFFFF"))
@@ -384,26 +385,26 @@ if GUI_BACKEND == "pyside6":
             self.setStyleSheet(
                 """
                 QWidget {
-                    background: #F5F5F7;
+                    background: #F2F2F7;
                     color: #1D1D1F;
                 }
                 QMainWindow {
-                    background: #F5F5F7;
+                    background: #F2F2F7;
                     font-family: -apple-system, "SF Pro Text", ".SF NS Text", "Helvetica Neue", Arial, sans-serif;
                 }
                 QToolBar {
-                    background: #F5F5F7;
+                    background: #F2F2F7;
                     border: none;
-                    border-bottom: 1px solid #DADADF;
-                    spacing: 10px;
-                    padding: 8px 14px;
+                    border-bottom: 1px solid #D1D1D6;
+                    spacing: 8px;
+                    padding: 8px 16px;
                 }
                 QGroupBox {
                     background: #FFFFFF;
                     border: 1px solid #E5E5EA;
-                    border-radius: 12px;
+                    border-radius: 14px;
                     margin-top: 12px;
-                    padding: 16px;
+                    padding: 18px;
                     font-weight: 600;
                     color: #1D1D1F;
                 }
@@ -414,13 +415,9 @@ if GUI_BACKEND == "pyside6":
                     color: #6E6E73;
                 }
                 QLabel#pageTitle {
-                    font-size: 24px;
-                    font-weight: 650;
-                    color: #1D1D1F;
-                }
-                QLabel#secondaryText {
-                    color: #6E6E73;
                     font-size: 13px;
+                    font-weight: 600;
+                    color: #6E6E73;
                 }
                 QLabel#dropTitle {
                     color: #1D1D1F;
@@ -430,7 +427,7 @@ if GUI_BACKEND == "pyside6":
                 QFrame#dropArea {
                     background: #FFFFFF;
                     border: 1px dashed #C7C7CC;
-                    border-radius: 12px;
+                    border-radius: 10px;
                 }
                 QFrame#dropArea[dragging="true"] {
                     background: #EEF6FF;
@@ -448,6 +445,10 @@ if GUI_BACKEND == "pyside6":
                     color: #3A3A3C;
                     font-size: 13px;
                     font-weight: 600;
+                }
+                QLabel#footerText {
+                    color: #8E8E93;
+                    font-size: 12px;
                 }
                 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTextBrowser:focus {
                     border: 1px solid #0A84FF;
@@ -520,7 +521,7 @@ if GUI_BACKEND == "pyside6":
                     border-bottom-right-radius: 9px;
                 }
                 QFrame#statCard {
-                    background: #FFFFFF;
+                    background: #FAFAFC;
                     border: 1px solid #E5E5EA;
                     border-radius: 12px;
                 }
@@ -627,11 +628,8 @@ if GUI_BACKEND == "pyside6":
             self.setCentralWidget(central)
 
             root = QVBoxLayout(central)
-            root.setContentsMargins(24, 14, 24, 18)
-            root.setSpacing(14)
-
-            title = QLabel(APP_TITLE)
-            title.setObjectName("pageTitle")
+            root.setContentsMargins(20, 12, 20, 16)
+            root.setSpacing(10)
 
             self.mode_bar = QTabBar()
             self.mode_bar.setExpanding(False)
@@ -649,10 +647,12 @@ if GUI_BACKEND == "pyside6":
             self._build_help_page()
 
             footer = QLabel(COPYRIGHT_TEXT)
-            footer.setObjectName("secondaryText")
+            footer.setObjectName("footerText")
             footer.setAlignment(Qt.AlignCenter)
 
-            root.addWidget(title)
+            self.header_label = QLabel("Counter")
+            self.header_label.setObjectName("pageTitle")
+            root.addWidget(self.header_label)
             root.addWidget(self.mode_bar, 0, alignment=Qt.AlignLeft)
             root.addWidget(self.stack, 1)
             root.addWidget(footer)
@@ -687,8 +687,10 @@ if GUI_BACKEND == "pyside6":
             file_layout.addLayout(file_row)
 
             settings_group = QGroupBox("Settings")
-            settings_layout = QGridLayout(settings_group)
-            settings_layout.setHorizontalSpacing(14)
+            settings_layout = QFormLayout(settings_group)
+            settings_layout.setLabelAlignment(Qt.AlignLeft)
+            settings_layout.setFormAlignment(Qt.AlignTop)
+            settings_layout.setHorizontalSpacing(18)
             settings_layout.setVerticalSpacing(12)
 
             self.tolerance_spin = QSpinBox()
@@ -708,16 +710,16 @@ if GUI_BACKEND == "pyside6":
             self.dpi_spin.setValue(24)
             self.dpi_spin.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
 
-            settings_layout.addWidget(QLabel("Tolerance"), 0, 0)
-            settings_layout.itemAtPosition(0, 0).widget().setObjectName("fieldLabel")
-            settings_layout.addWidget(self.tolerance_spin, 0, 1)
-            settings_layout.addWidget(QLabel("Min. color ratio"), 1, 0)
-            settings_layout.itemAtPosition(1, 0).widget().setObjectName("fieldLabel")
-            settings_layout.addWidget(self.ratio_spin, 1, 1)
-            settings_layout.addWidget(QLabel("DPI"), 2, 0)
-            settings_layout.itemAtPosition(2, 0).widget().setObjectName("fieldLabel")
-            settings_layout.addWidget(self.dpi_spin, 2, 1)
-            settings_layout.setColumnStretch(1, 1)
+            tolerance_label = QLabel("Tolerance")
+            tolerance_label.setObjectName("fieldLabel")
+            ratio_label = QLabel("Min. color ratio")
+            ratio_label.setObjectName("fieldLabel")
+            dpi_label = QLabel("DPI")
+            dpi_label.setObjectName("fieldLabel")
+
+            settings_layout.addRow(tolerance_label, self.tolerance_spin)
+            settings_layout.addRow(ratio_label, self.ratio_spin)
+            settings_layout.addRow(dpi_label, self.dpi_spin)
 
             actions_row = QHBoxLayout()
             actions_row.addStretch()
@@ -792,6 +794,7 @@ if GUI_BACKEND == "pyside6":
 
         def _on_mode_changed(self, index):
             self.stack.setCurrentIndex(index)
+            self.header_label.setText("Counter" if index == 0 else "Help")
 
         def show_help_view(self):
             self.mode_bar.setCurrentIndex(1)
