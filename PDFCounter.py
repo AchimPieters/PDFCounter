@@ -11,7 +11,21 @@ import re
 import sys
 import hashlib
 import hmac
+import subprocess
 from pathlib import Path
+
+# Hints for PyInstaller static analysis:
+# the imports below are intentionally unreachable at runtime, but help
+# PyInstaller discover optional GUI modules when building from this script.
+if False:  # pragma: no cover
+    from PySide6 import QtCore as _QtCoreHint
+    from PySide6 import QtGui as _QtGuiHint
+    from PySide6 import QtWidgets as _QtWidgetsHint
+    import tkinter as _TkHint
+    import tkinter.filedialog as _TkFileDialogHint
+    import tkinter.messagebox as _TkMessageBoxHint
+    import tkinter.simpledialog as _TkSimpleDialogHint
+    import tkinter.ttk as _TtkHint
 
 
 APP_TITLE = "PDF Color / Black-and-White Counter"
@@ -369,6 +383,10 @@ if GUI_BACKEND == "pyside6":
 
             self.setStyleSheet(
                 """
+                QWidget {
+                    background: #F5F5F7;
+                    color: #1D1D1F;
+                }
                 QMainWindow {
                     background: #F5F5F7;
                     font-family: -apple-system, "SF Pro Text", ".SF NS Text", "Helvetica Neue", Arial, sans-serif;
@@ -1019,6 +1037,27 @@ def run_cli():
     return 0
 
 
+def show_startup_error(message):
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, message, APP_TITLE, 0x10)
+            return
+        except Exception:
+            pass
+
+    if sys.platform == "darwin":
+        escaped = message.replace("\\", "\\\\").replace('"', '\\"')
+        script = f'display alert "{APP_TITLE}" message "{escaped}" as critical'
+        try:
+            subprocess.run(["osascript", "-e", script], check=False)
+            return
+        except Exception:
+            pass
+
+    print(message)
+
+
 def main():
     if GUI_BACKEND == "pyside6":
         app = QApplication(sys.argv)
@@ -1030,6 +1069,15 @@ def main():
     if GUI_BACKEND == "tkinter":
         TkApp().run()
         return 0
+
+    if getattr(sys, "frozen", False) and len(sys.argv) < 2:
+        show_startup_error(
+            "No GUI toolkit was packaged, so the app cannot stay open in windowed mode.\n\n"
+            "Make sure PySide6 is installed in the same Python environment, then rebuild with:\n"
+            "python -m PyInstaller --onefile --windowed --icon PDFCounter.icns "
+            "--collect-submodules PySide6 --collect-data PySide6 PDFCounter.py"
+        )
+        return 1
 
     return run_cli()
 
