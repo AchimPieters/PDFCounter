@@ -1,8 +1,9 @@
-# IMPORTANT:
-# Run this script from the folder where the file is located.
-# Example:
-# cd Desktop
-# pyinstaller --onefile --windowed pdf_color_bw_counter_app.py
+# IMPORTANT (macOS build tip):
+# If `pyinstaller` fails with `PermissionError: [Errno 1] Operation not permitted`
+# it usually means the current working directory is blocked by macOS privacy rules.
+# Fix by switching to an allowed directory first (for example this repo directory),
+# then run:
+# python -m PyInstaller --onefile --windowed --icon PDFCounter.icns PDFCounter.py
 
 import importlib
 import json
