@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact_name: PDFCounter-macos
+            py_cmd: python
+            icon_arg: "--icon PDFCounter.icns"
+          - os: windows-latest
+            artifact_name: PDFCounter-windows.exe
+            py_cmd: py
+            icon_arg: "--icon PDFCounter.ico"
+          - os: ubuntu-latest
+            artifact_name: PDFCounter-linux
+            py_cmd: python3
+            icon_arg: ""
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: ${{ matrix.py_cmd }} -m pip install --upgrade pip pyinstaller pymupdf PySide6
+
+      - name: Build executable (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          ${{ matrix.py_cmd }} -m PyInstaller --onefile --windowed ${{ matrix.icon_arg }} PDFCounter.py
+
+      - name: Build executable (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ${{ matrix.py_cmd }} -m PyInstaller --onefile --windowed ${{ matrix.icon_arg }} PDFCounter.py
+
+      - name: Rename artifact (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: mv dist/PDFCounter dist/${{ matrix.artifact_name }}
+
+      - name: Rename artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Rename-Item -Path dist/PDFCounter.exe -NewName ${{ matrix.artifact_name }}
+
+      - name: Upload GitHub Release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.artifact_name }}
