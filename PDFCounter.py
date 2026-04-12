@@ -1,16 +1,13 @@
-# IMPORTANT:
-# Run this script from the folder where the file is located.
-# Example:
-# cd Desktop
-# pyinstaller --onefile --windowed pdf_color_bw_counter_app.py
+# IMPORTANT (macOS build tip):
+# If `pyinstaller` fails with `PermissionError: [Errno 1] Operation not permitted`
+# it usually means the current working directory is blocked by macOS privacy rules.
+# Fix by switching to an allowed directory first (for example this repo directory),
+# then run:
+# python -m PyInstaller --onefile --windowed --icon PDFCounter.icns PDFCounter.py
 
 import importlib
-import json
 import os
-import re
 import sys
-import hashlib
-import hmac
 import subprocess
 from pathlib import Path
 
@@ -30,9 +27,6 @@ if False:  # pragma: no cover
 
 APP_TITLE = "PDF Color / Black-and-White Counter"
 COPYRIGHT_TEXT = "© Achim Pieters 2026"
-UNREGISTERED_PAGE_LIMIT = 25
-LICENSE_SIGNING_CODE = os.environ.get("PDFCOUNTER_LICENSE_SIGNING_CODE", "PDFCounter-Default-Signing-Code")
-LICENSE_FILE = Path.home() / ".pdfcounter_license.json"
 
 
 def _load_gui_backend():
@@ -53,12 +47,14 @@ def _load_gui_backend():
                 "Signal": qtcore.Signal,
                 "QSize": qtcore.QSize,
                 "QAction": qtgui.QAction,
+                "QFont": qtgui.QFont,
                 "QPalette": qtgui.QPalette,
                 "QColor": qtgui.QColor,
                 "QAbstractSpinBox": qtwidgets.QAbstractSpinBox,
                 "QApplication": qtwidgets.QApplication,
                 "QFileDialog": qtwidgets.QFileDialog,
                 "QDoubleSpinBox": qtwidgets.QDoubleSpinBox,
+                "QFormLayout": qtwidgets.QFormLayout,
                 "QFrame": qtwidgets.QFrame,
                 "QGridLayout": qtwidgets.QGridLayout,
                 "QGroupBox": qtwidgets.QGroupBox,
@@ -74,6 +70,7 @@ def _load_gui_backend():
                 "QStackedWidget": qtwidgets.QStackedWidget,
                 "QStyle": qtwidgets.QStyle,
                 "QTabBar": qtwidgets.QTabBar,
+                "QTabWidget": qtwidgets.QTabWidget,
                 "QTextBrowser": qtwidgets.QTextBrowser,
                 "QToolBar": qtwidgets.QToolBar,
                 "QToolButton": qtwidgets.QToolButton,
@@ -139,59 +136,6 @@ def load_fitz():
         + "\n- ".join(errors)
     )
     raise RuntimeError(message)
-
-
-def normalize_email(email):
-    return email.strip().lower()
-
-
-def generate_serial(email, serial_code=LICENSE_SIGNING_CODE):
-    clean_email = normalize_email(email)
-    digest = hmac.new(
-        serial_code.encode("utf-8"),
-        clean_email.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest().upper()
-    compact = digest[:25]
-    return "-".join(compact[i:i + 5] for i in range(0, len(compact), 5))
-
-
-def normalize_serial(serial):
-    return re.sub(r"[^A-Z0-9]", "", serial.upper())
-
-
-def is_valid_license(email, serial):
-    expected = normalize_serial(generate_serial(email))
-    return hmac.compare_digest(normalize_serial(serial), expected)
-
-
-def save_license(email, serial):
-    LICENSE_FILE.write_text(
-        json.dumps({"email": normalize_email(email), "serial": serial}, indent=2),
-        encoding="utf-8",
-    )
-
-
-def load_license():
-    if not LICENSE_FILE.exists():
-        return None
-    try:
-        data = json.loads(LICENSE_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-
-    email = data.get("email", "")
-    serial = data.get("serial", "")
-    if not email or not serial:
-        return None
-    return {"email": email, "serial": serial}
-
-
-def is_registered():
-    license_data = load_license()
-    if not license_data:
-        return False
-    return is_valid_license(license_data["email"], license_data["serial"])
 
 
 def is_color_page(page, fitz_module, tolerance=12, min_color_ratio=0.001, dpi=24):
@@ -275,6 +219,7 @@ if GUI_BACKEND == "pyside6":
             super().__init__()
             self.setAcceptDrops(True)
             self.setObjectName("dropArea")
+            self.setFrameShape(QFrame.StyledPanel)
             self._build_ui()
 
         def _build_ui(self):
@@ -333,29 +278,6 @@ if GUI_BACKEND == "pyside6":
             event.ignore()
 
 
-    class StatCard(QFrame):
-        def __init__(self, title):
-            super().__init__()
-            self.setObjectName("statCard")
-            layout = QVBoxLayout(self)
-            layout.setContentsMargins(18, 16, 18, 16)
-            layout.setSpacing(6)
-
-            self.title_label = QLabel(title)
-            self.title_label.setObjectName("statTitle")
-
-            self.value_label = QLabel("—")
-            self.value_label.setObjectName("statValue")
-            self.value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-
-            layout.addWidget(self.title_label)
-            layout.addWidget(self.value_label)
-            layout.addStretch()
-
-        def set_value(self, value):
-            self.value_label.setText(str(value))
-
-
     class MainWindow(QMainWindow):
         def __init__(self):
             super().__init__()
@@ -369,188 +291,24 @@ if GUI_BACKEND == "pyside6":
             self._build_ui()
 
         def _apply_palette(self):
-            palette = self.palette()
-            palette.setColor(QPalette.Window, QColor("#F5F5F7"))
-            palette.setColor(QPalette.Base, QColor("#FFFFFF"))
-            palette.setColor(QPalette.AlternateBase, QColor("#F2F2F7"))
-            palette.setColor(QPalette.Button, QColor("#FFFFFF"))
-            palette.setColor(QPalette.ButtonText, QColor("#1D1D1F"))
-            palette.setColor(QPalette.Text, QColor("#1D1D1F"))
-            palette.setColor(QPalette.WindowText, QColor("#1D1D1F"))
-            palette.setColor(QPalette.Highlight, QColor("#0A84FF"))
-            palette.setColor(QPalette.HighlightedText, QColor("#FFFFFF"))
-            self.setPalette(palette)
-
             self.setStyleSheet(
                 """
-                QWidget {
-                    background: #F5F5F7;
-                    color: #1D1D1F;
-                }
-                QMainWindow {
-                    background: #F5F5F7;
-                    font-family: -apple-system, "SF Pro Text", ".SF NS Text", "Helvetica Neue", Arial, sans-serif;
-                }
-                QToolBar {
-                    background: rgba(255,255,255,0.92);
-                    border: none;
-                    border-bottom: 1px solid #DADADF;
-                    spacing: 8px;
-                    padding: 8px 12px;
-                }
-                QGroupBox {
-                    background: #FFFFFF;
-                    border: 1px solid #E5E5EA;
-                    border-radius: 12px;
-                    margin-top: 12px;
-                    padding: 16px;
+                QLabel#dropTitle {
+                    font-size: 19px;
                     font-weight: 600;
-                    color: #1D1D1F;
-                }
-                QGroupBox::title {
-                    subcontrol-origin: margin;
-                    left: 12px;
-                    padding: 0 6px;
-                    color: #6E6E73;
-                }
-                QLabel#pageTitle {
-                    font-size: 28px;
-                    font-weight: 700;
-                    color: #1D1D1F;
                 }
                 QLabel#secondaryText {
-                    color: #6E6E73;
-                    font-size: 13px;
-                }
-                QLabel#dropTitle {
-                    color: #1D1D1F;
-                    font-size: 17px;
-                    font-weight: 600;
+                    color: palette(mid);
                 }
                 QFrame#dropArea {
-                    background: #FBFBFD;
-                    border: 1px dashed #C7C7CC;
-                    border-radius: 12px;
+                    border: 1px dashed palette(mid);
+                    border-radius: 8px;
                 }
                 QFrame#dropArea[dragging="true"] {
-                    background: #EEF6FF;
-                    border: 2px dashed #0A84FF;
+                    border: 2px solid palette(highlight);
                 }
-                QLineEdit, QSpinBox, QDoubleSpinBox, QTextBrowser {
-                    background: #FFFFFF;
-                    border: 1px solid #D1D1D6;
-                    border-radius: 10px;
-                    padding: 8px 10px;
-                    min-height: 22px;
-                    color: #1D1D1F;
-                }
-                QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTextBrowser:focus {
-                    border: 1px solid #0A84FF;
-                }
-                QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
-                    width: 18px;
-                    border: none;
-                    background: transparent;
-                }
-                QPushButton, QToolButton {
-                    background: #FFFFFF;
-                    border: 1px solid #D1D1D6;
-                    border-radius: 10px;
-                    padding: 7px 14px;
-                    min-height: 20px;
-                    color: #1D1D1F;
-                    font-weight: 500;
-                }
-                QPushButton:hover, QToolButton:hover {
-                    background: #F2F2F7;
-                }
-                QPushButton:pressed, QToolButton:pressed {
-                    background: #E5E5EA;
-                }
-                QPushButton:disabled, QToolButton:disabled {
-                    color: #8E8E93;
-                }
-                QPushButton#accentButton {
-                    background: #0A84FF;
-                    border: 1px solid #0A84FF;
-                    color: white;
-                    font-weight: 600;
-                    padding: 8px 18px;
-                    min-width: 150px;
-                }
-                QPushButton#accentButton:hover {
-                    background: #0077ED;
-                }
-                QPushButton#accentButton:pressed {
-                    background: #0068D1;
-                }
-                QPushButton#accentButton:disabled {
-                    background: #A7D0FF;
-                    border: 1px solid #A7D0FF;
-                    color: #FFFFFF;
-                }
-                QToolButton#toolbarButton {
-                    min-width: 92px;
-                    padding: 7px 12px;
-                    color: #1D1D1F;
-                }
-                QToolButton#toolbarPrimaryButton {
-                    min-width: 92px;
-                    padding: 7px 12px;
-                    background: #0A84FF;
-                    border: 1px solid #0A84FF;
-                    color: #FFFFFF;
-                    font-weight: 600;
-                }
-                QToolButton#toolbarPrimaryButton:hover {
-                    background: #0077ED;
-                }
-                QToolButton#toolbarPrimaryButton:pressed {
-                    background: #0068D1;
-                }
-                QToolButton#toolbarPrimaryButton:disabled {
-                    background: #A7D0FF;
-                    border: 1px solid #A7D0FF;
-                    color: #FFFFFF;
-                }
-                QTabBar::tab {
-                    background: #E9E9ED;
-                    color: #3A3A3C;
-                    border: 1px solid #D1D1D6;
-                    padding: 7px 18px;
-                    min-width: 100px;
-                    font-weight: 600;
-                }
-                QTabBar::tab:selected {
-                    background: #FFFFFF;
-                    color: #1D1D1F;
-                }
-                QTabBar::tab:first {
-                    border-top-left-radius: 9px;
-                    border-bottom-left-radius: 9px;
-                }
-                QTabBar::tab:last {
-                    border-top-right-radius: 9px;
-                    border-bottom-right-radius: 9px;
-                }
-                QFrame#statCard {
-                    background: #FFFFFF;
-                    border: 1px solid #E5E5EA;
-                    border-radius: 12px;
-                }
-                QLabel#statTitle {
-                    color: #6E6E73;
-                    font-size: 13px;
-                    font-weight: 600;
-                }
-                QLabel#statValue {
-                    color: #1D1D1F;
-                    font-size: 34px;
-                    font-weight: 700;
-                }
-                QTextBrowser {
-                    background: #FFFFFF;
-                    selection-background-color: #0A84FF;
+                QLabel#footerText {
+                    font-size: 12px;
                 }
                 """
             )
@@ -559,9 +317,16 @@ if GUI_BACKEND == "pyside6":
             menubar = self.menuBar()
             app_menu = menubar.addMenu("App")
 
-            register_action = QAction("Register License", self)
-            register_action.triggered.connect(self.register_license)
-            app_menu.addAction(register_action)
+            open_action = QAction("Open…", self)
+            open_action.triggered.connect(self.browse_pdf)
+            open_action.setShortcut("Ctrl+O")
+            app_menu.addAction(open_action)
+
+            analyze_action = QAction("Analyze", self)
+            analyze_action.triggered.connect(self.analyze_pdf)
+            analyze_action.setShortcut("Ctrl+R")
+            app_menu.addAction(analyze_action)
+            app_menu.addSeparator()
 
             about_action = QAction("About", self)
             about_action.triggered.connect(self.show_about)
@@ -575,6 +340,7 @@ if GUI_BACKEND == "pyside6":
 
             quit_action = QAction("Quit", self)
             quit_action.triggered.connect(self.close)
+            quit_action.setShortcut("Ctrl+Q")
             app_menu.addAction(quit_action)
 
         def _create_toolbar(self):
@@ -586,26 +352,17 @@ if GUI_BACKEND == "pyside6":
             self.toolbar = toolbar
 
             open_button = QToolButton()
-            open_button.setObjectName("toolbarButton")
             open_button.setText("Open")
             open_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
             open_button.setIcon(self.style().standardIcon(QStyle.SP_DialogOpenButton))
             open_button.clicked.connect(self.browse_pdf)
             toolbar.addWidget(open_button)
 
-            analyze_button = QToolButton()
-            analyze_button.setObjectName("toolbarPrimaryButton")
-            analyze_button.setText("Analyze")
-            analyze_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
-            analyze_button.clicked.connect(self.analyze_pdf)
-            toolbar.addWidget(analyze_button)
-
             spacer = QWidget()
             spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             toolbar.addWidget(spacer)
 
             help_button = QToolButton()
-            help_button.setObjectName("toolbarButton")
             help_button.setText("Help")
             help_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
             help_button.clicked.connect(self.show_help_view)
@@ -617,71 +374,31 @@ if GUI_BACKEND == "pyside6":
                 "About",
                 "PDF Color / Black-and-White Counter\n\n"
                 "Counts visible color and black-and-white pages in PDF files for print-cost estimation.\n\n"
-                f"License status: {self.license_status_text()}\n\n"
                 f"{COPYRIGHT_TEXT}",
             )
-
-        def license_status_text(self):
-            license_data = load_license()
-            if is_registered() and license_data:
-                return f"Registered to {license_data['email']}"
-            return f"Unregistered (max {UNREGISTERED_PAGE_LIMIT} pages per scan)"
-
-        def register_license(self):
-            email, ok = QInputDialog.getText(self, "Register License", "Email address:")
-            if not ok or not email.strip():
-                return
-
-            serial, ok = QInputDialog.getText(self, "Register License", "Serial key:")
-            if not ok or not serial.strip():
-                return
-
-            if is_valid_license(email, serial):
-                save_license(email, serial)
-                QMessageBox.information(self, APP_TITLE, "License activated successfully.")
-                return
-
-            QMessageBox.warning(self, APP_TITLE, "Invalid email/serial combination.")
 
         def _build_ui(self):
             central = QWidget()
             self.setCentralWidget(central)
 
             root = QVBoxLayout(central)
-            root.setContentsMargins(24, 18, 24, 18)
-            root.setSpacing(16)
+            root.setContentsMargins(16, 12, 16, 14)
+            root.setSpacing(12)
 
-            title = QLabel(APP_TITLE)
-            title.setObjectName("pageTitle")
-
-            self.mode_bar = QTabBar()
-            self.mode_bar.setExpanding(False)
-            self.mode_bar.addTab("Counter")
-            self.mode_bar.addTab("Help")
-            self.mode_bar.currentChanged.connect(self._on_mode_changed)
-
-            self.stack = QStackedWidget()
             self.counter_page = QWidget()
-            self.help_page = QWidget()
-            self.stack.addWidget(self.counter_page)
-            self.stack.addWidget(self.help_page)
-
             self._build_counter_page()
-            self._build_help_page()
 
             footer = QLabel(COPYRIGHT_TEXT)
-            footer.setObjectName("secondaryText")
+            footer.setObjectName("footerText")
             footer.setAlignment(Qt.AlignCenter)
 
-            root.addWidget(title)
-            root.addWidget(self.mode_bar, 0, alignment=Qt.AlignLeft)
-            root.addWidget(self.stack, 1)
+            root.addWidget(self.counter_page, 1)
             root.addWidget(footer)
 
         def _build_counter_page(self):
             root = QVBoxLayout(self.counter_page)
             root.setContentsMargins(0, 0, 0, 0)
-            root.setSpacing(16)
+            root.setSpacing(12)
 
             file_group = QGroupBox("Document")
             file_layout = QVBoxLayout(file_group)
@@ -689,7 +406,7 @@ if GUI_BACKEND == "pyside6":
 
             self.drop_area = DropArea()
             self.drop_area.file_dropped.connect(self.set_pdf_path)
-            self.drop_area.setMinimumHeight(150)
+            self.drop_area.setMinimumHeight(132)
 
             file_row = QHBoxLayout()
             file_row.setSpacing(10)
@@ -708,9 +425,11 @@ if GUI_BACKEND == "pyside6":
             file_layout.addLayout(file_row)
 
             settings_group = QGroupBox("Settings")
-            settings_layout = QGridLayout(settings_group)
+            settings_layout = QFormLayout(settings_group)
+            settings_layout.setLabelAlignment(Qt.AlignLeft)
+            settings_layout.setFormAlignment(Qt.AlignTop)
             settings_layout.setHorizontalSpacing(14)
-            settings_layout.setVerticalSpacing(12)
+            settings_layout.setVerticalSpacing(10)
 
             self.tolerance_spin = QSpinBox()
             self.tolerance_spin.setRange(0, 255)
@@ -729,33 +448,42 @@ if GUI_BACKEND == "pyside6":
             self.dpi_spin.setValue(24)
             self.dpi_spin.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
 
-            settings_layout.addWidget(QLabel("Tolerance"), 0, 0)
-            settings_layout.addWidget(self.tolerance_spin, 0, 1)
-            settings_layout.addWidget(QLabel("Min. color ratio"), 1, 0)
-            settings_layout.addWidget(self.ratio_spin, 1, 1)
-            settings_layout.addWidget(QLabel("DPI"), 2, 0)
-            settings_layout.addWidget(self.dpi_spin, 2, 1)
-            settings_layout.setColumnStretch(1, 1)
+            tolerance_label = QLabel("Tolerance")
+            ratio_label = QLabel("Min. color ratio")
+            dpi_label = QLabel("DPI")
+
+            settings_layout.addRow(tolerance_label, self.tolerance_spin)
+            settings_layout.addRow(ratio_label, self.ratio_spin)
+            settings_layout.addRow(dpi_label, self.dpi_spin)
 
             actions_row = QHBoxLayout()
             actions_row.addStretch()
 
             analyze_button = QPushButton("Analyze PDF")
-            analyze_button.setObjectName("accentButton")
+            analyze_button.setDefault(True)
             analyze_button.clicked.connect(self.analyze_pdf)
             actions_row.addWidget(analyze_button)
 
             results_group = QGroupBox("Results")
-            results_layout = QHBoxLayout(results_group)
-            results_layout.setSpacing(14)
+            results_layout = QFormLayout(results_group)
+            results_layout.setLabelAlignment(Qt.AlignLeft)
+            results_layout.setFormAlignment(Qt.AlignTop)
+            results_layout.setHorizontalSpacing(22)
+            results_layout.setVerticalSpacing(8)
 
-            self.total_card = StatCard("Total pages")
-            self.color_card = StatCard("Color pages")
-            self.bw_card = StatCard("Black-and-white pages")
+            self.total_value = QLabel("—")
+            self.color_value = QLabel("—")
+            self.bw_value = QLabel("—")
+            for label in (self.total_value, self.color_value, self.bw_value):
+                label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+                value_font = QFont(label.font())
+                value_font.setPointSize(max(16, value_font.pointSize() + 8))
+                value_font.setWeight(QFont.DemiBold)
+                label.setFont(value_font)
 
-            results_layout.addWidget(self.total_card, 1)
-            results_layout.addWidget(self.color_card, 1)
-            results_layout.addWidget(self.bw_card, 1)
+            results_layout.addRow(QLabel("Total pages"), self.total_value)
+            results_layout.addRow(QLabel("Color pages"), self.color_value)
+            results_layout.addRow(QLabel("Black-and-white pages"), self.bw_value)
 
             root.addWidget(file_group)
             root.addWidget(settings_group)
@@ -763,60 +491,22 @@ if GUI_BACKEND == "pyside6":
             root.addWidget(results_group)
             root.addStretch()
 
-        def _build_help_page(self):
-            root = QVBoxLayout(self.help_page)
-            root.setContentsMargins(0, 0, 0, 0)
-            root.setSpacing(16)
-
-            help_group = QGroupBox("Help")
-            help_layout = QVBoxLayout(help_group)
-
-            help_text = QTextBrowser()
-            help_text.setOpenExternalLinks(False)
-            help_text.setHtml(
-                """
-                <div style='font-size:14px; line-height:1.6; color:#1D1D1F;'>
-                <p><b>What this app does</b></p>
-                <p>This app estimates print counts by checking whether each PDF page contains visible color or only grayscale content.</p>
-
-                <p><b>How to use it</b></p>
-                <ol>
-                  <li>Open a PDF from the toolbar, or drag a PDF into the drop area.</li>
-                  <li>Adjust the settings if needed.</li>
-                  <li>Click <b>Analyze PDF</b>.</li>
-                  <li>Read the totals in the Results section.</li>
-                </ol>
-
-                <p><b>Settings</b></p>
-                <ul>
-                  <li><b>Tolerance</b>: how different RGB channels must be before a pixel counts as color. Higher values reduce sensitivity to very small color shifts.</li>
-                  <li><b>Min. color ratio</b>: the minimum fraction of colored pixels required before a page counts as a color page.</li>
-                  <li><b>DPI</b>: the rendering resolution used during analysis. Lower values are faster; higher values can be more precise.</li>
-                </ul>
-
-                <p><b>Recommended starting values</b></p>
-                <ul>
-                  <li>Tolerance: <b>12</b></li>
-                  <li>Min. color ratio: <b>0.0010</b></li>
-                  <li>DPI: <b>24</b></li>
-                </ul>
-                </div>
-                """
-            )
-
-            help_layout.addWidget(help_text)
-            root.addWidget(help_group)
-            root.addStretch()
-
-        def _on_mode_changed(self, index):
-            self.stack.setCurrentIndex(index)
-
         def show_help_view(self):
-            self.mode_bar.setCurrentIndex(1)
+            QMessageBox.information(
+                self,
+                "How to Use",
+                "1. Open a PDF from the toolbar, or drag a PDF into the drop area.\n"
+                "2. Adjust settings if needed.\n"
+                "3. Click Analyze PDF.\n"
+                "4. Read totals in Results.\n\n"
+                "Settings:\n"
+                "- Tolerance: color sensitivity between RGB channels.\n"
+                "- Min. color ratio: fraction of colored pixels needed.\n"
+                "- DPI: render resolution for analysis.",
+            )
 
         def set_pdf_path(self, path):
             self.file_edit.setText(path)
-            self.mode_bar.setCurrentIndex(0)
 
         def dragEnterEvent(self, event):
             if event.mimeData().hasUrls():
@@ -854,28 +544,19 @@ if GUI_BACKEND == "pyside6":
                 return
 
             try:
-                page_limit = None if is_registered() else UNREGISTERED_PAGE_LIMIT
                 total_pages, color_pages, bw_pages = count_pdf_pages(
                     pdf_path,
                     tolerance=self.tolerance_spin.value(),
                     min_color_ratio=self.ratio_spin.value(),
                     dpi=self.dpi_spin.value(),
-                    page_limit=page_limit,
                 )
             except Exception as exc:
                 QMessageBox.critical(self, APP_TITLE, f"Analysis failed:\n{exc}")
                 return
 
-            if not is_registered():
-                QMessageBox.information(
-                    self,
-                    APP_TITLE,
-                    f"Unregistered mode: only the first {UNREGISTERED_PAGE_LIMIT} pages were scanned.",
-                )
-
-            self.total_card.set_value(total_pages)
-            self.color_card.set_value(color_pages)
-            self.bw_card.set_value(bw_pages)
+            self.total_value.setText(str(total_pages))
+            self.color_value.setText(str(color_pages))
+            self.bw_value.setText(str(bw_pages))
 
 
 if GUI_BACKEND == "tkinter":
@@ -904,7 +585,6 @@ if GUI_BACKEND == "tkinter":
             self.file_var = tk.StringVar()
             ttk.Entry(file_frame, textvariable=self.file_var).pack(side="left", fill="x", expand=True)
             ttk.Button(file_frame, text="Open…", command=self.browse_pdf).pack(side="left", padx=(8, 0))
-            ttk.Button(file_frame, text="Register", command=self.register_license).pack(side="left", padx=(8, 0))
 
             settings = ttk.LabelFrame(counter_tab, text="Settings", padding=10)
             settings.pack(fill="x", pady=(0, 10))
@@ -972,51 +652,25 @@ if GUI_BACKEND == "tkinter":
                 return
 
             try:
-                page_limit = None if is_registered() else UNREGISTERED_PAGE_LIMIT
                 total_pages, color_pages, bw_pages = count_pdf_pages(
                     pdf_path,
                     tolerance=int(self.tolerance_var.get()),
                     min_color_ratio=float(self.ratio_var.get()),
                     dpi=int(self.dpi_var.get()),
-                    page_limit=page_limit,
                 )
             except Exception as exc:
                 messagebox.showerror(APP_TITLE, f"Analysis failed:\n{exc}")
                 return
 
-            if not is_registered():
-                messagebox.showinfo(
-                    APP_TITLE,
-                    f"Unregistered mode: only the first {UNREGISTERED_PAGE_LIMIT} pages were scanned.",
-                )
-
             self.total_var.set(str(total_pages))
             self.color_var.set(str(color_pages))
             self.bw_var.set(str(bw_pages))
-
-        def register_license(self):
-            email = simpledialog.askstring(APP_TITLE, "Email address:")
-            if not email:
-                return
-            serial = simpledialog.askstring(APP_TITLE, "Serial key:")
-            if not serial:
-                return
-            if is_valid_license(email, serial):
-                save_license(email, serial)
-                messagebox.showinfo(APP_TITLE, "License activated successfully.")
-            else:
-                messagebox.showwarning(APP_TITLE, "Invalid email/serial combination.")
 
         def run(self):
             self.root.mainloop()
 
 
 def run_cli():
-    if len(sys.argv) >= 3 and sys.argv[1] == "--generate-serial":
-        email = sys.argv[2]
-        print(generate_serial(email))
-        return 0
-
     if len(sys.argv) < 2:
         print("Usage: python PDFCounter.py file.pdf")
         print("Or run the script in an environment with PySide6 or tkinter for the graphical interface.")
@@ -1025,8 +679,7 @@ def run_cli():
     pdf_path = sys.argv[1]
 
     try:
-        page_limit = None if is_registered() else UNREGISTERED_PAGE_LIMIT
-        total_pages, color_pages, bw_pages = count_pdf_pages(pdf_path, page_limit=page_limit)
+        total_pages, color_pages, bw_pages = count_pdf_pages(pdf_path)
     except Exception as exc:
         print(f"Error: {exc}")
         return 1

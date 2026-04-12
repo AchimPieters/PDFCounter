@@ -98,6 +98,34 @@ Exit codes:
 
 ---
 
+## Build macOS app bundle/executable (PyInstaller)
+
+Use:
+
+```bash
+python -m PyInstaller --onefile --windowed --icon PDFCounter.icns PDFCounter.py
+```
+
+### Troubleshooting: `PermissionError: [Errno 1] Operation not permitted`
+
+If PyInstaller crashes immediately at startup with a traceback that points to `os.getcwd()`, your current shell directory is likely blocked by macOS privacy permissions (Desktop/Documents/iCloud folders often trigger this).
+
+Try this:
+
+1. `cd` into an allowed folder (for example the repository folder itself in your home directory, or another non-protected location).
+2. Re-run the build command above.
+3. If needed, grant your terminal app Full Disk Access in:
+   - **System Settings → Privacy & Security → Full Disk Access**
+
+You can also verify your current directory before building:
+
+```bash
+pwd
+python -c "import os; print(os.getcwd())"
+```
+
+---
+
 ## Detection settings explained
 
 - **Tolerance** (0–255): minimum RGB channel distance to treat a pixel as color.
