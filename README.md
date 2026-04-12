@@ -147,6 +147,42 @@ Then open **GitHub → Releases** to see the generated release assets.
 
 ---
 
+## Build exact filenames locally
+
+If you want to create these exact files yourself:
+
+- `PDFCounter-macos`
+- `PDFCounter-windows.exe`
+- `PDFCounter-linux`
+
+use the commands below on each target OS.
+
+### macOS
+
+```bash
+python -m pip install --upgrade pip pyinstaller pymupdf PySide6
+python -m PyInstaller --onefile --windowed --icon PDFCounter.icns PDFCounter.py
+mv dist/PDFCounter dist/PDFCounter-macos
+```
+
+### Windows (PowerShell)
+
+```powershell
+py -m pip install --upgrade pip pyinstaller pymupdf PySide6
+py -m PyInstaller --onefile --windowed --icon PDFCounter.ico PDFCounter.py
+Rename-Item -Path dist/PDFCounter.exe -NewName PDFCounter-windows.exe
+```
+
+### Linux
+
+```bash
+python3 -m pip install --upgrade pip pyinstaller pymupdf PySide6
+python3 -m PyInstaller --onefile --windowed PDFCounter.py
+mv dist/PDFCounter dist/PDFCounter-linux
+```
+
+---
+
 ## Detection settings explained
 
 - **Tolerance** (0–255): minimum RGB channel distance to treat a pixel as color.
