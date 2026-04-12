@@ -98,6 +98,91 @@ Exit codes:
 
 ---
 
+## Build macOS app bundle/executable (PyInstaller)
+
+Use:
+
+```bash
+python -m PyInstaller --onefile --windowed --icon PDFCounter.icns PDFCounter.py
+```
+
+### Troubleshooting: `PermissionError: [Errno 1] Operation not permitted`
+
+If PyInstaller crashes immediately at startup with a traceback that points to `os.getcwd()`, your current shell directory is likely blocked by macOS privacy permissions (Desktop/Documents/iCloud folders often trigger this).
+
+Try this:
+
+1. `cd` into an allowed folder (for example the repository folder itself in your home directory, or another non-protected location).
+2. Re-run the build command above.
+3. If needed, grant your terminal app Full Disk Access in:
+   - **System Settings → Privacy & Security → Full Disk Access**
+
+You can also verify your current directory before building:
+
+```bash
+pwd
+python -c "import os; print(os.getcwd())"
+```
+
+---
+
+## Automated GitHub Releases (macOS / Windows / Linux)
+
+This repository includes a release workflow that builds platform binaries and uploads them to a GitHub Release when you push a version tag:
+
+- Tag pattern: `v*` (examples: `v3.0.0`, `v3.1.2`)
+- Outputs:
+  - `PDFCounter-macos`
+  - `PDFCounter-windows.exe`
+  - `PDFCounter-linux`
+
+Create and publish a new release trigger:
+
+```bash
+git tag v3.0.0
+git push origin v3.0.0
+```
+
+Then open **GitHub → Releases** to see the generated release assets.
+
+---
+
+## Build exact filenames locally
+
+If you want to create these exact files yourself:
+
+- `PDFCounter-macos`
+- `PDFCounter-windows.exe`
+- `PDFCounter-linux`
+
+use the commands below on each target OS.
+
+### macOS
+
+```bash
+python -m pip install --upgrade pip pyinstaller pymupdf PySide6
+python -m PyInstaller --onefile --windowed --icon PDFCounter.icns PDFCounter.py
+mv dist/PDFCounter dist/PDFCounter-macos
+```
+
+### Windows (PowerShell)
+
+```powershell
+py -m pip install --upgrade pip pyinstaller pymupdf PySide6
+py -m PyInstaller --onefile --windowed --icon PDFCounter.ico PDFCounter.py
+Rename-Item -Path dist/PDFCounter.exe -NewName PDFCounter-windows.exe
+```
+
+### Linux
+
+```bash
+python3 -m pip install --upgrade pip pyinstaller pymupdf PySide6
+python3 -m PyInstaller --onefile --windowed PDFCounter.py
+mv dist/PDFCounter dist/PDFCounter-linux
+```
+
+---
+
 ## Detection settings explained
 
 - **Tolerance** (0–255): minimum RGB channel distance to treat a pixel as color.
