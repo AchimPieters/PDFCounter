@@ -543,7 +543,7 @@ if GUI_BACKEND == "pyside6":
 
             file_group = QGroupBox("Document")
             file_layout = QVBoxLayout(file_group)
-            file_layout.setSpacing(12)
+            file_layout.setSpacing(10)
 
             self.drop_area = DropArea()
             self.drop_area.file_dropped.connect(self.set_pdf_path)
