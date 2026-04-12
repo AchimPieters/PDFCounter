@@ -75,6 +75,7 @@ def _load_gui_backend():
                 "QStackedWidget": qtwidgets.QStackedWidget,
                 "QStyle": qtwidgets.QStyle,
                 "QTabBar": qtwidgets.QTabBar,
+                "QTabWidget": qtwidgets.QTabWidget,
                 "QTextBrowser": qtwidgets.QTextBrowser,
                 "QToolBar": qtwidgets.QToolBar,
                 "QToolButton": qtwidgets.QToolButton,
@@ -276,6 +277,7 @@ if GUI_BACKEND == "pyside6":
             super().__init__()
             self.setAcceptDrops(True)
             self.setObjectName("dropArea")
+            self.setFrameShape(QFrame.StyledPanel)
             self._build_ui()
 
         def _build_ui(self):
@@ -338,6 +340,7 @@ if GUI_BACKEND == "pyside6":
         def __init__(self, title):
             super().__init__()
             self.setObjectName("statCard")
+            self.setFrameShape(QFrame.StyledPanel)
             layout = QVBoxLayout(self)
             layout.setContentsMargins(18, 16, 18, 16)
             layout.setSpacing(6)
@@ -371,99 +374,48 @@ if GUI_BACKEND == "pyside6":
 
         def _apply_palette(self):
             palette = self.palette()
-            palette.setColor(QPalette.Window, QColor("#F2F2F7"))
-            palette.setColor(QPalette.AlternateBase, QColor("#F2F2F7"))
-            palette.setColor(QPalette.Highlight, QColor("#0A84FF"))
+            palette.setColor(QPalette.Highlight, QColor("#0A84FF"))  # system blue
             self.setPalette(palette)
 
             self.setStyleSheet(
                 """
-                QToolBar {
-                    background: #F2F2F7;
-                    border-bottom: 1px solid #D1D1D6;
-                    spacing: 6px;
-                    padding: 6px 12px;
-                }
-                QGroupBox {
-                    margin-top: 10px;
-                    padding: 10px 8px 8px 8px;
-                    font-weight: 600;
-                }
-                QGroupBox::title {
-                    subcontrol-origin: margin;
-                    left: 8px;
-                    padding: 0 4px;
-                    color: #6E6E73;
-                }
-                QLabel#pageTitle {
-                    font-size: 13px;
-                    font-weight: 600;
-                    color: #6E6E73;
-                }
                 QLabel#dropTitle {
-                    color: #1D1D1F;
-                    font-size: 17px;
+                    font-size: 18px;
                     font-weight: 600;
                 }
                 QFrame#dropArea {
-                    background: #FFFFFF;
-                    border: 1px dashed #C7C7CC;
-                    border-radius: 10px;
+                    background: palette(base);
+                    border: 1px dashed palette(mid);
+                    border-radius: 8px;
                 }
                 QFrame#dropArea[dragging="true"] {
-                    background: #EEF6FF;
-                    border: 2px dashed #0A84FF;
+                    border: 2px solid palette(highlight);
                 }
-                QLabel#fieldLabel {
-                    color: #3A3A3C;
+                QLabel#formLabel {
                     font-size: 13px;
                     font-weight: 500;
                 }
                 QLabel#footerText {
-                    color: #8E8E93;
                     font-size: 12px;
                 }
-                QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
-                    width: 18px;
-                }
                 QPushButton#accentButton {
-                    background: #0A84FF;
-                    border: 1px solid #0A84FF;
-                    color: white;
                     font-weight: 600;
-                    padding: 6px 16px;
-                    min-width: 132px;
-                    border-radius: 8px;
-                }
-                QPushButton#accentButton:hover {
-                    background: #0077ED;
-                }
-                QPushButton#accentButton:pressed {
-                    background: #0068D1;
-                }
-                QPushButton#accentButton:disabled {
-                    background: #A7D0FF;
-                    border: 1px solid #A7D0FF;
-                    color: #FFFFFF;
                 }
                 QToolButton#toolbarButton {
-                    min-width: 86px;
-                    padding: 6px 10px;
+                    padding: 4px 8px;
                 }
                 QFrame#statCard {
-                    background: #FAFAFC;
-                    border: 1px solid #E5E5EA;
-                    border-radius: 12px;
+                    background: palette(base);
+                    border: 1px solid palette(midlight);
+                    border-radius: 10px;
                 }
                 QLabel#statTitle {
-                    color: #6E6E73;
-                    font-size: 13px;
+                    font-size: 12px;
                     font-weight: 600;
                 }
                 QLabel#statValue {
-                    color: #1D1D1F;
-                    font-size: 30px;
-                    font-weight: 650;
+                    font-size: 28px;
+                    font-weight: 700;
                 }
                 """
             )
@@ -471,6 +423,15 @@ if GUI_BACKEND == "pyside6":
         def _create_menu(self):
             menubar = self.menuBar()
             app_menu = menubar.addMenu("App")
+
+            open_action = QAction("Open…", self)
+            open_action.triggered.connect(self.browse_pdf)
+            app_menu.addAction(open_action)
+
+            analyze_action = QAction("Analyze", self)
+            analyze_action.triggered.connect(self.analyze_pdf)
+            app_menu.addAction(analyze_action)
+            app_menu.addSeparator()
 
             register_action = QAction("Register License", self)
             register_action.triggered.connect(self.register_license)
@@ -554,21 +515,16 @@ if GUI_BACKEND == "pyside6":
             self.setCentralWidget(central)
 
             root = QVBoxLayout(central)
-            root.setContentsMargins(20, 12, 20, 16)
+            root.setContentsMargins(16, 12, 16, 14)
             root.setSpacing(12)
 
-            self.mode_bar = QTabBar()
-            self.mode_bar.setExpanding(False)
-            self.mode_bar.setDrawBase(False)
-            self.mode_bar.addTab("Counter")
-            self.mode_bar.addTab("Help")
-            self.mode_bar.currentChanged.connect(self._on_mode_changed)
-
-            self.stack = QStackedWidget()
+            self.tabs = QTabWidget()
+            self.tabs.setDocumentMode(True)
+            self.tabs.setMovable(False)
             self.counter_page = QWidget()
             self.help_page = QWidget()
-            self.stack.addWidget(self.counter_page)
-            self.stack.addWidget(self.help_page)
+            self.tabs.addTab(self.counter_page, "Counter")
+            self.tabs.addTab(self.help_page, "Help")
 
             self._build_counter_page()
             self._build_help_page()
@@ -577,17 +533,13 @@ if GUI_BACKEND == "pyside6":
             footer.setObjectName("footerText")
             footer.setAlignment(Qt.AlignCenter)
 
-            self.header_label = QLabel("Counter")
-            self.header_label.setObjectName("pageTitle")
-            root.addWidget(self.header_label)
-            root.addWidget(self.mode_bar, 0, alignment=Qt.AlignLeft)
-            root.addWidget(self.stack, 1)
+            root.addWidget(self.tabs, 1)
             root.addWidget(footer)
 
         def _build_counter_page(self):
             root = QVBoxLayout(self.counter_page)
             root.setContentsMargins(0, 0, 0, 0)
-            root.setSpacing(14)
+            root.setSpacing(12)
 
             file_group = QGroupBox("Document")
             file_layout = QVBoxLayout(file_group)
@@ -617,8 +569,8 @@ if GUI_BACKEND == "pyside6":
             settings_layout = QFormLayout(settings_group)
             settings_layout.setLabelAlignment(Qt.AlignLeft)
             settings_layout.setFormAlignment(Qt.AlignTop)
-            settings_layout.setHorizontalSpacing(18)
-            settings_layout.setVerticalSpacing(12)
+            settings_layout.setHorizontalSpacing(14)
+            settings_layout.setVerticalSpacing(10)
 
             self.tolerance_spin = QSpinBox()
             self.tolerance_spin.setRange(0, 255)
@@ -638,11 +590,11 @@ if GUI_BACKEND == "pyside6":
             self.dpi_spin.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
 
             tolerance_label = QLabel("Tolerance")
-            tolerance_label.setObjectName("fieldLabel")
+            tolerance_label.setObjectName("formLabel")
             ratio_label = QLabel("Min. color ratio")
-            ratio_label.setObjectName("fieldLabel")
+            ratio_label.setObjectName("formLabel")
             dpi_label = QLabel("DPI")
-            dpi_label.setObjectName("fieldLabel")
+            dpi_label.setObjectName("formLabel")
 
             settings_layout.addRow(tolerance_label, self.tolerance_spin)
             settings_layout.addRow(ratio_label, self.ratio_spin)
@@ -719,16 +671,12 @@ if GUI_BACKEND == "pyside6":
             root.addWidget(help_group)
             root.addStretch()
 
-        def _on_mode_changed(self, index):
-            self.stack.setCurrentIndex(index)
-            self.header_label.setText("Counter" if index == 0 else "Help")
-
         def show_help_view(self):
-            self.mode_bar.setCurrentIndex(1)
+            self.tabs.setCurrentIndex(1)
 
         def set_pdf_path(self, path):
             self.file_edit.setText(path)
-            self.mode_bar.setCurrentIndex(0)
+            self.tabs.setCurrentIndex(0)
 
         def dragEnterEvent(self, event):
             if event.mimeData().hasUrls():
