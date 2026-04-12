@@ -126,6 +126,27 @@ python -c "import os; print(os.getcwd())"
 
 ---
 
+## Automated GitHub Releases (macOS / Windows / Linux)
+
+This repository includes a release workflow that builds platform binaries and uploads them to a GitHub Release when you push a version tag:
+
+- Tag pattern: `v*` (examples: `v3.0.0`, `v3.1.2`)
+- Outputs:
+  - `PDFCounter-macos`
+  - `PDFCounter-windows.exe`
+  - `PDFCounter-linux`
+
+Create and publish a new release trigger:
+
+```bash
+git tag v3.0.0
+git push origin v3.0.0
+```
+
+Then open **GitHub → Releases** to see the generated release assets.
+
+---
+
 ## Detection settings explained
 
 - **Tolerance** (0–255): minimum RGB channel distance to treat a pixel as color.
